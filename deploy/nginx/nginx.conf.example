@@ -1,0 +1,196 @@
+# Standalone Linux nginx.conf for a dedicated InferGate host.
+# Customize domain, certificates, root, worker user and administrator allowlist.
+# For a shared Nginx host, merge the http{} contents into its existing http{};
+# do not nest http{} inside a sites-enabled/conf.d include.
+user www-data;
+worker_processes auto;
+pid /run/nginx.pid;
+error_log /var/log/nginx/error.log warn;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    server_tokens off;
+    sendfile on;
+    keepalive_timeout 65s;
+    client_header_timeout 15s;
+    client_body_timeout 30s;
+    send_timeout 60s;
+
+    # Log metadata only: no query strings, headers, credentials or bodies.
+    # Fragments (#user-...) are never sent to Nginx by the browser.
+    log_format infergate '$remote_addr [$time_local] "$request_method $uri $server_protocol" '
+                        '$status $body_bytes_sent $request_time';
+    access_log /var/log/nginx/infergate-access.log infergate;
+    # Nginx error logs can contain the original request URI. Disable them for
+    # proxied API locations below to avoid persisting client-supplied queries.
+
+    # Shared per-IP setup/login protection on this Nginx instance only.
+    # Empty keys are not counted, so other administrator API calls are unaffected.
+    map $uri $infergate_login_key {
+        default "";
+        ~*^/admin/(login|setup)/?$ $binary_remote_addr;
+        ~*^/manager/(login|password)/?$ $binary_remote_addr;
+    }
+    limit_req_zone $infergate_login_key zone=infergate_login:10m rate=5r/m;
+
+    upstream infergate_backend {
+        server 127.0.0.1:3000;
+        keepalive 16;
+    }
+
+    # Unknown HTTP hosts never redirect to a client-controlled hostname.
+    server {
+        listen 80 default_server;
+        listen [::]:80 default_server;
+        server_name _;
+        return 444;
+    }
+
+    server {
+        listen 80;
+        listen [::]:80;
+        server_name infergate.example.com;
+
+        # Optional webroot for an external ACME certificate client.
+        location ^~ /.well-known/acme-challenge/ {
+            root /var/www/letsencrypt;
+            default_type text/plain;
+            try_files $uri =404;
+        }
+        location / {
+            # Use HTTPS directly in API clients; credentials sent over HTTP
+            # cannot be protected retroactively by this redirect.
+            return 308 https://infergate.example.com$request_uri;
+        }
+    }
+
+    server {
+        listen 443 ssl default_server;
+        listen [::]:443 ssl default_server;
+        server_name infergate.example.com;
+
+        # Certificates must exist before enabling this TLS server.
+        ssl_certificate /etc/letsencrypt/live/infergate.example.com/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/infergate.example.com/privkey.pem;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_session_cache shared:InferGateTLS:10m;
+        ssl_session_timeout 1d;
+        ssl_session_tickets off;
+
+        # Reject requests using another Host header, including over valid TLS.
+        if ($host != infergate.example.com) { return 444; }
+
+        root /srv/infergate/frontend/dist;
+        index index.html;
+
+        add_header Strict-Transport-Security "max-age=31536000" always;
+        add_header X-Content-Type-Options nosniff always;
+        add_header X-Frame-Options DENY always;
+        add_header Referrer-Policy no-referrer always;
+        # Revalidate frontend files after deployments; private APIs send no-store.
+        expires -1;
+
+        # Match the default 10 MiB backend inference-body limit.
+        client_max_body_size 10m;
+
+        # Common API forwarding. No URI suffix on proxy_pass below: preserve
+        # /admin, /manager, /user and /v1 instead of stripping their prefixes.
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header Connection "";
+        proxy_set_header Upgrade "";
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # The backend currently does not trust forwarded client-IP headers.
+        proxy_connect_timeout 5s;
+        proxy_send_timeout 30s;
+        # Idle interval between backend reads, not a total request deadline.
+        # Allow time for classification/discovery plus inference before headers.
+        proxy_read_timeout 600s;
+        proxy_buffering off;
+        proxy_ignore_headers X-Accel-Buffering;
+        proxy_request_buffering off;
+        proxy_cache off;
+        proxy_next_upstream off;
+        proxy_intercept_errors off;
+        proxy_ignore_client_abort off;
+        gzip off;
+        # Set the browser-facing security headers once, including static files.
+        proxy_hide_header X-Content-Type-Options;
+        proxy_hide_header X-Frame-Options;
+        proxy_hide_header Referrer-Policy;
+
+        # Keep administrator API access on trusted IPs/VPNs. Add your actual
+        # administrator public IP or VPN CIDR ABOVE deny all before deployment.
+        # Case-insensitive matching also protects Express's /ADMIN aliases.
+        location ~* ^/admin(?:/|$) {
+            allow 127.0.0.1;
+            allow ::1;
+            # allow 203.0.113.10/32;  # Replace with your administrator IP.
+            # allow 10.20.0.0/16;    # Replace with your trusted VPN subnet.
+            deny all;
+            limit_req zone=infergate_login burst=5 nodelay;
+            limit_req_status 429;
+            client_max_body_size 64k;
+            expires off;
+            error_log /dev/null crit;
+            proxy_pass http://infergate_backend;
+        }
+
+        # Manager sessions have application-enforced permissions. Keep this
+        # separate from the administrator IP allowlist.
+        location ~* ^/manager(?:/|$) {
+            limit_req zone=infergate_login burst=5 nodelay;
+            limit_req_status 429;
+            client_max_body_size 64k;
+            expires off;
+            error_log /dev/null crit;
+            proxy_pass http://infergate_backend;
+        }
+
+        # Publicly reachable APIs still require their own application bearer key.
+        location ~* ^/user(?:/|$) {
+            client_max_body_size 64k;
+            expires off;
+            error_log /dev/null crit;
+            proxy_pass http://infergate_backend;
+        }
+        location ~* ^/v1(?:/|$) {
+            expires off;
+            error_log /dev/null crit;
+            proxy_pass http://infergate_backend;
+        }
+
+        # Optional operational checks, restricted independently of user access.
+        location = /health {
+            allow 127.0.0.1;
+            allow ::1;
+            deny all;
+            expires off;
+            error_log /dev/null crit;
+            proxy_pass http://infergate_backend;
+        }
+        location = /ready {
+            allow 127.0.0.1;
+            allow ::1;
+            deny all;
+            expires off;
+            error_log /dev/null crit;
+            proxy_pass http://infergate_backend;
+        }
+
+        # Only the compiled frontend is public; never use the repository as root.
+        location ~ (^|/)\. { return 404; }
+        location / {
+            # Navigation lives in the hash, so unknown paths really are 404s.
+            try_files $uri $uri/ =404;
+        }
+    }
+}
