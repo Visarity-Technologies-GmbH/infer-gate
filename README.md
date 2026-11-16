@@ -10,6 +10,10 @@ InferGate lets teams share access to AI providers without sharing vendor credent
 - **Debug logs.** Administrators can enable **Settings → Chat completion debug logging** to inspect individual Chat Completions and Anthropic Messages requests. Logs can contain prompt and response content, the classifier exchange, and the evaluation result when those steps run. Capture is off by default and has a 60-day retention period. [Debug log details](backend/README.md#chat-completion-and-messages-debug-logs)
 - **Accounting:** report tokens and estimated costs by user, model, or provider, filter by group, and set daily or weekly user caps. Pricing supports [Claude cache-write durations](backend/README.md#five-minute-and-one-hour-cache-writes).
 - **Delegated access:** managers can manage users, groups, and proxy keys and view organization-wide reports. Private read-only usage links let individual users check their own consumption, estimated cost, and remaining allowance.
+- **MCP support:** connect MCP clients such as AI assistants to InferGate over Streamable HTTP with `Authorization: Bearer <token>`. Use a dashboard session or a personal token created on the **MCP tokens** page (named, with an expiry date).
+  - **Admin MCP (`/admin/mcp`):** administrator only. Manage users, groups, proxy keys, roles and their upstream assignments, model policies, upstream keys and providers, and read usage reports and caps. For example, ask an assistant to list a role's upstreams, check which models a role may use, or rename a proxy key.
+  - **Manager MCP (`/manager/mcp`):** for managers. List, create, rename and suspend users, set usage caps and create usage links, manage groups and members, and create, rename or revoke proxy keys and assign them an existing role. It cannot edit roles, policies, pricing or infrastructure.
+  - **Report MCP (`/report/mcp`):** read-only for administrators and managers. Its single `get_usage_report` tool returns the same token and estimated-cost report as the dashboard, filtered by period, users, groups, keys, provider, model, status and grouping.
 
 ## How to install
 
@@ -53,7 +57,7 @@ From the repository root, run `cd backend` and `npm ci`. Create your local confi
 
 Edit `backend/.env`:
 
-- For MySQL, leave `DB_ENABLED=true` and set `DB_USER=infergate`, `DB_NAME=InferGate`, and `DB_PASSWORD` to the password from step 2. Set `DB_PORT=3306` for a standard MySQL installation; the example file uses **3307**. Leave `DB_HOST=127.0.0.1` for a local server. For SQLite, set `DB_ENABLED=false` and skip the MySQL settings.
+- For MySQL, leave `DB_ENABLED=true` and set `DB_USER=infergate`, `DB_NAME=InferGate`, and `DB_PASSWORD` to the password from step 2. Set `DB_PORT=3306` for a standard MySQL installation. Leave `DB_HOST=127.0.0.1` for a local server. For SQLite, set `DB_ENABLED=false` and skip the MySQL settings.
 - Set `REDIS_ENABLED=false` unless you have configured a Redis server for caching.
 - Run the following command **twice**. Use the first result for `ENCRYPTION_KEY` and the second for `BOOTSTRAP_TOKEN`. Keep the file private and preserve the encryption key: it is needed to decrypt stored provider credentials.
 
