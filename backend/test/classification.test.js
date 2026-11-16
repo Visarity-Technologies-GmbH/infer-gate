@@ -34,7 +34,8 @@ async function fixture(t, { enabled = true, assigned = true, deny = false, timeo
       if (sql.startsWith('INSERT INTO api_requests')) return { insertId: 1 };
       if (sql.includes('FROM proxy_api_keys k')) return [{ id: 1, user_id: 2, role_id: roleId, role_status: 'ACTIVE', model_policy_id: 8, classification_handler_id: assigned ? 9 : null, classification_config_hash: classificationConfigHash, classification_max_token: maxToken, evaluation_script: script, prompt_script: promptScript, input_script: inputScript, output_script: outputScript, status: 'ACTIVE', user_status: suspended ? 'SUSPENDED' : 'ACTIVE' }];
       if (sql.includes('FROM classification_handlers')) return [{ api_url: 'https://classifier.example/classify', encrypted_api_key: encrypt('classifier-test-secret', encryptionKey), json_template: '{"prompt":"${PROMPT}","option":true}', maxToken }];
-      if (sql.includes('FROM model_policy_rules')) { events.push('policy'); return policies ?? [{ model_pattern: '*', policy: deny ? 'DENY' : 'ALLOW' }]; }
+      if (sql.includes('FROM role_upstream_model_aliases')) return [];
+      if (sql.includes('FROM role_model_policies')) { events.push('policy'); return policies ?? [{ model_pattern: '*', policy: deny ? 'DENY' : 'ALLOW' }]; }
       if (sql.includes('FROM role_upstream_assignments')) {
         const primary = { upstream_api_key_id: 3, provider_id: 4, key_status: 'ACTIVE', provider_status: 'ACTIVE', api_url: 'https://upstream.example/v1', api_type: 'OPENAI_COMPATIBLE', encrypted_api_key: encrypt('upstream-test-secret', encryptionKey) };
         return secondModelIds ? [primary, { ...primary, upstream_api_key_id: 5, provider_id: 6, api_url: 'https://second.example/v1' }] : [primary];
@@ -153,7 +154,7 @@ test('classification runs with logging disabled and is skipped for unassigned ro
   assert.deepEqual(await readdir(f.path), []);
   const unassigned = await fixture(t, { assigned: false, enabled: false });
   assert.equal((await unassigned.request()).status, 200);
-  assert.deepEqual(unassigned.events, ['policy', 'upstream']);
+  assert.deepEqual(unassigned.events, ['models', 'policy', 'upstream']);
   const skipped = await fixture(t, { assigned: false, enabled: true });
   assert.equal((await skipped.request()).status, 200);
   for (const entry of await readdir(skipped.path)) {
@@ -402,7 +403,7 @@ test('cache hits reuse routed model and evaluation metadata without invoking cla
   // A classifier error on the next request would fail if it were called again.
   f.mode('network');
   assert.equal(await (await f.request({ ...f.input, stream: true })).text(), f.sse);
-  assert.deepEqual(f.events, ['classification', 'models', 'policy', 'upstream', 'policy', 'upstream']);
+  assert.deepEqual(f.events, ['classification', 'models', 'policy', 'upstream', 'models', 'policy', 'upstream']);
   assert.equal(f.usages.length, 2);
   for (const usage of f.usages) {
     assert.equal(usage[5], 'alternate'); assert.equal(usage[14], 'cached'); assert.equal(usage[15], false); assert.equal(usage[16], 'test-model'); assert.equal(usage[17], 1);
@@ -552,7 +553,7 @@ test('prompt failure stops classification and inference without fallback', async
   assert(!f.events.includes('upstream'));
 });
 
-test('input scripts run after classification, restore shared context on cache hits, and log exact output', async t => {
+test('input scripts run after classification, share per-request prompt context on cache hits, and log exact output', async t => {
   const values = new Map();
   const cache = { async get(key) { return values.get(key); }, async set(key, value) { values.set(key, value); } };
   const f = await fixture(t, {
@@ -561,8 +562,8 @@ test('input scripts run after classification, restore shared context on cache hi
     script: 'async function evaluate(input, input_type, classification, models, context) { context.ready = true; return { category: "test", sensitiveData: false, models: null }; }',
     inputScript: `async function updateInput(input, type, context) {
       await Promise.resolve();
-      if (!context.ready || context.type !== type) throw new Error('missing shared context');
-      context.ready = false;
+      // The prompt script runs on every request; evaluation context exists only on the cache miss.
+      if (context.type !== type) throw new Error('missing shared context');
       input.temperature = 0.7;
       return input;
     }`,
@@ -571,7 +572,7 @@ test('input scripts run after classification, restore shared context on cache hi
     const response = await f.request(); assert.equal(response.status, 200); await response.text();
   }
   assert.equal(f.events.filter(event => event === 'classification').length, 1);
-  assert.equal([...values.values()][0].context.ready, true);
+  assert.equal('context' in [...values.values()][0], false);
   for (const entry of await readdir(f.path)) {
     const outputPath = join(f.path, entry, 'update_input.json');
     assert.deepEqual(JSON.parse(await readFile(outputPath, 'utf8')), { ...f.input, temperature: 0.7 });
@@ -582,7 +583,7 @@ test('input scripts run after classification, restore shared context on cache hi
 
 test('input scripts run without classification, keep logging disabled and support model/stream changes', async t => {
   const f = await fixture(t, { enabled: false, assigned: false, expectedModel: 'alternate', modelIds: ['test-model', 'alternate'],
-    inputScript: 'async function updateInput(input, type, context) { if (type !== "OPENAI" || Object.keys(context).length) throw new Error("bad context"); input.model = "alternate"; input.stream = true; return input; }' });
+    inputScript: 'async function updateInput(input, type, context) { if (type !== "OPENAI" || context.user_id !== 2 || context.role_id !== 7 || typeof context.request_id !== "string" || Object.keys(JSON.parse(JSON.stringify(context))).sort().join() !== "request_id,role_id,user_id") throw new Error("bad context"); input.model = "alternate"; input.stream = true; return input; }' });
   const response = await f.request(); assert.equal(response.status, 200);
   assert.match(response.headers.get('content-type'), /text\/event-stream/);
   await response.text();
@@ -630,7 +631,7 @@ test('debug logging captures JSON and SSE originals without output scripts or cl
   }
 });
 
-test('output scripts see shared context on cache hits, replace JSON and retain original accounting/debug output', async t => {
+test('output scripts share per-request input context on cache hits, replace JSON and retain original accounting/debug output', async t => {
   const values = new Map();
   const f = await fixture(t, {
     includeUsage: true,
@@ -639,7 +640,7 @@ test('output scripts see shared context on cache hits, replace JSON and retain o
     inputScript: 'async function updateInput(input, type, context) { context.fromInput = type; return input; }',
     outputScript: `async function updateOutput(output, type, context) {
       await Promise.resolve();
-      if (!context.fromEvaluation || context.fromInput !== type) throw new Error('missing context');
+      if (context.fromInput !== type) throw new Error('missing context');
       output.choices[0].message.content = 'Updated';
       output.usage.total_tokens = 999;
       return output;
@@ -788,4 +789,83 @@ test('disconnecting before stream completion still records CANCELLED with an out
   const record = f.logs.find(event => event.event === 'proxy_request');
   assert.equal(record?.status, 'CANCELLED');
   assert.equal(record.error_code, 'client_disconnected');
+});
+
+// The classification cache stores only the routing decision. Script context is per request:
+// it is never written to the cache and never restored from it.
+const recordContext = name => `context.${name} = true;
+      await context.logDebug('${name}_context.json', JSON.stringify(context));`;
+async function loggedContexts(path) {
+  const results = [];
+  for (const entry of (await readdir(path)).sort()) {
+    const read = async name => { try { return JSON.parse(await readFile(join(path, entry, name), 'utf8')); } catch { return null; } };
+    // Request directories are named `${timestamp}-${request_id}`.
+    results.push({ requestId: entry.slice(entry.indexOf('-') + 1), input: await read('input_context.json'), output: await read('output_context.json') });
+  }
+  return results;
+}
+
+test('classification cache entries never contain script context', async t => {
+  const values = new Map();
+  const f = await fixture(t, {
+    includeUsage: true,
+    classificationCache: { async get(key) { return values.get(key); }, async set(key, value) { values.set(key, value); } },
+    promptScript: 'async function prompt(input, type, limit, context) { context.fromPrompt = true; return JSON.stringify(input.messages); }',
+    script: 'async function evaluate(input, input_type, classification, models, context) { context.fromEvaluation = true; return { category: "test", sensitiveData: false, complexity: 1, models: null }; }',
+    inputScript: `async function updateInput(input, type, context) { ${recordContext('input')} return input; }`,
+    outputScript: `async function updateOutput(output, type, context) { ${recordContext('output')} return output; }`,
+  });
+  for (let i = 0; i < 2; i++) { const response = await f.request(); assert.equal(response.status, 200); await response.text(); }
+  assert.equal(f.events.filter(event => event === 'classification').length, 1);
+  assert.equal(values.size, 1);
+  assert.deepEqual([...values.values()][0], { version: 1, model: 'test-model', category: 'test', sensitiveData: false, complexity: 1 });
+});
+
+test('scripts on a classification cache hit see only the current request context', async t => {
+  const values = new Map();
+  const f = await fixture(t, {
+    includeUsage: true,
+    classificationCache: { async get(key) { return values.get(key); }, async set(key, value) { values.set(key, value); } },
+    promptScript: 'async function prompt(input, type, limit, context) { context.promptRequest = context.request_id; return JSON.stringify(input.messages); }',
+    script: 'async function evaluate(input, input_type, classification, models, context) { context.fromEvaluation = true; return { category: "test", sensitiveData: false, models: null }; }',
+    inputScript: `async function updateInput(input, type, context) { ${recordContext('input')} return input; }`,
+    outputScript: `async function updateOutput(output, type, context) { ${recordContext('output')} return output; }`,
+  });
+  for (let i = 0; i < 2; i++) { const response = await f.request(); assert.equal(response.status, 200); await response.text(); }
+  assert.equal(f.events.filter(event => event === 'classification').length, 1);
+  const [miss, hit] = await loggedContexts(f.path);
+  assert.notEqual(miss.requestId, hit.requestId);
+  for (const [request, cacheHit] of [[miss, false], [hit, true]]) {
+    for (const context of [request.input, request.output]) {
+      // Gateway fields always describe the current request.
+      assert.equal(context.user_id, 2); assert.equal(context.role_id, 7);
+      assert.equal(context.request_id, request.requestId);
+      // The prompt script runs on every request, so its fields belong to the current request too.
+      assert.equal(context.promptRequest, request.requestId);
+      // Evaluation does not run on a hit, and its context is not restored from the cache.
+      assert.equal(context.fromEvaluation, cacheHit ? undefined : true);
+    }
+    assert.equal(request.output.input, true);
+  }
+});
+
+test('legacy cache entries that carry a context never leak it into scripts', async t => {
+  const legacy = { version: 1, model: 'test-model', category: 'cached', sensitiveData: false, complexity: 0,
+    context: { user_id: 99, role_id: 99, request_id: 'foreign-request', foreign: 'other user data' } };
+  const f = await fixture(t, {
+    includeUsage: true,
+    classificationCache: { async get() { return structuredClone(legacy); }, async set() { throw new Error('must not write on a hit'); } },
+    inputScript: `async function updateInput(input, type, context) { ${recordContext('input')} return input; }`,
+    outputScript: `async function updateOutput(output, type, context) { ${recordContext('output')} return output; }`,
+  });
+  const response = await f.request(); assert.equal(response.status, 200); await response.text();
+  // The entry is still used for the routing decision.
+  assert(!f.events.includes('classification'));
+  assert.equal(f.usages[0][14], 'cached');
+  const [request] = await loggedContexts(f.path);
+  for (const context of [request.input, request.output]) {
+    assert.equal(context.user_id, 2); assert.equal(context.role_id, 7);
+    assert.equal(context.request_id, request.requestId);
+    assert.equal(context.foreign, undefined);
+  }
 });

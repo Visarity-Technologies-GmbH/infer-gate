@@ -23,7 +23,8 @@ async function fixture(t, options = {}) {
         assert.equal(params[0], digest('pak_test'));
         return options.invalidKey ? [] : [{ id: 1, user_id: 2, role_id: 7, role_status: 'ACTIVE', model_policy_id: 8, status: options.keyStatus || 'ACTIVE', user_status: options.userStatus || 'ACTIVE' }];
       }
-      if (sql.includes('FROM model_policy_rules')) return policies;
+      if (sql.includes('FROM role_model_policies')) return policies;
+      if (sql.includes('FROM role_upstream_model_aliases')) return [];
       if (sql.includes('FROM role_upstream_assignments')) {
         assert(sql.includes("a.status='ACTIVE'"));
         assert(sql.includes('ORDER BY a.priority DESC, a.id ASC'));
@@ -78,9 +79,10 @@ test('restricted model listing uses assigned provider and preserves permitted mo
 test('model listing follows exact deny, wildcard rules and system defaults', async t => {
   const cases = [
     { policies: [], expected: [] },
-    { policies: [], fallback: 'ALLOW', expected: catalogue.data },
-    { policies: [{ model_pattern: '*', policy: 'ALLOW' }, { model_pattern: 'model-a', policy: 'DENY' }], expected: catalogue.data.slice(1) },
-    { policies: [{ model_pattern: '*', policy: 'ALLOW' }, { model_pattern: 'model-a', policy: 'ALLOW' }, { model_pattern: 'model-a', policy: 'DENY' }], expected: catalogue.data.slice(1) },
+    // Listings are sorted by model ID (localeCompare): model-a, Model-A, model-b.
+    { policies: [], fallback: 'ALLOW', expected: [catalogue.data[0], catalogue.data[2], catalogue.data[1]] },
+    { policies: [{ model_pattern: '*', policy: 'ALLOW' }, { model_pattern: 'model-a', policy: 'DENY' }], expected: [catalogue.data[2], catalogue.data[1]] },
+    { policies: [{ model_pattern: '*', policy: 'ALLOW' }, { model_pattern: 'model-a', policy: 'ALLOW' }, { model_pattern: 'model-a', policy: 'DENY' }], expected: [catalogue.data[2], catalogue.data[1]] },
     { policies: [{ model_pattern: 'not-in-provider', policy: 'ALLOW' }], expected: [] }
   ];
   for (const options of cases) {
@@ -130,7 +132,8 @@ test('models from all assigned keys are merged, policy filtered and deduplicated
   });
   const response = await f.request();
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { object: 'list', data: [{ id: 'shared', owned_by: 'first' }, { id: 'first-only' }, { id: 'same-provider-other-key' }, { id: 'other-provider' }] });
+  // Sorted by ID; the duplicate keeps the highest-priority upstream's metadata.
+  assert.deepEqual(await response.json(), { object: 'list', data: [{ id: 'first-only' }, { id: 'other-provider' }, { id: 'same-provider-other-key' }, { id: 'shared', owned_by: 'first' }] });
   assert.equal(f.upstreamCalls.length, 3);
   assert.equal(f.upstreamCalls[2].url, 'https://second.example/v1/models');
   assert.equal(response.headers.get('x-request-id'), null);
@@ -186,6 +189,8 @@ test('combined model listing skips rejected credentials and malformed catalogues
 
 test('Gemini 503 chat errors explain overload and persist a safe failure classification', async t => {
   const f = await fixture(t, { assignments: [{ api_type: 'GEMINI', api_url: 'https://provider.example/v1beta' }], responses: [
+    // Model discovery runs before routing the chat request.
+    { authorization: null, body: { models: [{ name: 'models/model-a' }] } },
     { authorization: null, status: 503, body: { error: { code: 503, status: 'UNAVAILABLE', message: 'This model is currently experiencing high demand. private-prompt native-secret' } } }
   ] });
   const response = await f.request('/v1/chat/completions', 'POST', { model: 'model-a', messages: [{ role: 'user', content: 'Hello' }], stream: true });
@@ -194,8 +199,9 @@ test('Gemini 503 chat errors explain overload and persist a safe failure classif
   assert(!JSON.stringify(value).includes('private-prompt')); assert(!JSON.stringify(value).includes('native-secret'));
   const finalized = f.queries.find(q => q.sql.includes('completed_at='));
   assert.equal(finalized.params[9], 503); assert.equal(finalized.params[10], 'FAILED'); assert.equal(finalized.params[12], 'server_error'); assert.equal(finalized.params[13], 'upstream_unavailable');
-  assert.equal(f.upstreamCalls.length, 1);
-  assert.equal(f.upstreamCalls[0].url, 'https://provider.example/v1beta/models/model-a:streamGenerateContent?alt=sse');
+  assert.equal(f.upstreamCalls.length, 2);
+  assert.equal(f.upstreamCalls[0].url, 'https://provider.example/v1beta/models');
+  assert.equal(f.upstreamCalls[1].url, 'https://provider.example/v1beta/models/model-a:streamGenerateContent?alt=sse');
 });
 
 test('cached catalogues are reused for listing while current policies and statuses still apply', async t => {
@@ -206,7 +212,7 @@ test('cached catalogues are reused for listing while current policies and status
   const f = await fixture(t, options);
   assert.equal((await f.request()).status, 200);
   policies.push({ model_pattern: 'model-a', policy: 'DENY' });
-  assert.deepEqual((await (await f.request()).json()).data.map(m => m.id), ['model-b', 'Model-A']);
+  assert.deepEqual((await (await f.request()).json()).data.map(m => m.id), ['Model-A', 'model-b']);
   assert.equal(f.upstreamCalls.length, 1);
   options.userStatus = 'SUSPENDED'; assert.equal((await f.request()).status, 403);
   options.userStatus = 'ACTIVE'; options.keyStatus = 'REVOKED'; assert.equal((await f.request()).status, 401);

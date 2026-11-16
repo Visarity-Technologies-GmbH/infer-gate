@@ -13,7 +13,6 @@ export function classificationCacheKey(role, messages, protocol, promptReplaceme
     // Evaluation may derive context from fields outside the reduced prompt.
     ...(role.input_script != null || role.output_script != null ? [role.input_script, role.output_script, createHash('sha256').update(JSON.stringify(input ?? null)).digest('hex')] : []),
     ...(protocol ? [protocol] : []),
-    ...(role.prompt_script != null ? [role.prompt_script, context] : []),
   ])).digest('hex');
   return `infergate:classification:v5:${scope}:${promptHash}`;
 }

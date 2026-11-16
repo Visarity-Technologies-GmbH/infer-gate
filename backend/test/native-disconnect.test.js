@@ -16,7 +16,7 @@ test('native streams cancel upstream work and finalize tracking on disconnect or
           if (sql.startsWith('SELECT * FROM model_pricing')) return [];
           if (sql.startsWith('INSERT INTO api_requests')) return { insertId: 1 };
           if (sql.includes('FROM proxy_api_keys k')) return [{ id: 1, user_id: 2, role_id: 7, role_status: 'ACTIVE', model_policy_id: 8, status: 'ACTIVE', user_status: 'ACTIVE' }];
-          if (sql.includes('FROM model_policy_rules')) return [{ model_pattern: '*', policy: 'ALLOW' }];
+          if (sql.includes('FROM role_model_policies')) return [{ model_policy_id: 8, model_pattern: '*', policy: 'ALLOW' }];
           if (sql.includes('FROM role_upstream_assignments')) return [{ upstream_api_key_id: 3, provider_id: 4, key_status: 'ACTIVE', provider_status: 'ACTIVE', api_type: type, aws_region: 'us-east-1', api_url: 'https://mock.example/v1', encrypted_api_key: encrypt('native-test-key', encryptionKey) }];
           if (sql.includes('completed_at=')) finalized.push(params);
           if (sql.startsWith('INSERT INTO usage_events')) usages.push(params);
@@ -25,7 +25,9 @@ test('native streams cancel upstream work and finalize tracking on disconnect or
         async transaction(fn) { return fn(db); }
       };
       const config = { encryptionKey, bootstrapToken: 'test-bootstrap', modelDefault: 'DENY', bodyLimit: 10000, timeout: reason === 'timeout' ? 100 : 5000 };
-      const app = createApp(db, config, { log() {}, fetchImpl: async (url, init) => new Response(new ReadableStream({
+      // Model discovery runs before forwarding; answer it in each provider's catalogue format.
+      const catalogue = type === 'GEMINI' ? { models: [{ name: `models/${model}` }] } : { data: [{ id: model }] };
+      const app = createApp(db, config, { log() {}, fetchImpl: async (url, init) => new URL(url).pathname.endsWith('/models') ? Response.json(catalogue) : new Response(new ReadableStream({
         start(controller) {
           const events = type !== 'GEMINI' ? [
             { type: 'message_start', message: { id: 'msg_partial', model, usage: { input_tokens: 4, output_tokens: 0 } } },

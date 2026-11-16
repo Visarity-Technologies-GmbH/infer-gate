@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdtemp, readdir, readFile, stat, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { ChatOutputCollector } from '../src/services/chat-output.js';
 import { MessagesOutputCollector } from '../src/services/messages-output.js';
 import { createDebugLogger } from '../src/services/debug-log.js';
@@ -23,15 +23,19 @@ async function directory(t) {
 
 test('debug logger captures final split UTF-8 output, nullable usage, permissions and retention', async t => {
   const path = await directory(t);
-  const expired = join(path, `${Date.now() - 8 * 86400000}-${randomUUID()}`);
+  const expired = join(path, `${Date.now() - 61 * 86400000}-${randomUUID()}`);
+  const retained = join(path, `${Date.now() - 59 * 86400000}-${randomUUID()}`);
   await mkdir(expired); await writeFile(join(expired, 'input.json'), 'old secret');
+  await mkdir(retained);
   const record = { request_id: randomUUID(), started_at: new Date(), request_status: 'CANCELLED' };
   const logger = await createDebugLogger({ directory: path })(record, Buffer.from('{"messages":[{"content":"private input"}]}'));
   const bytes = Buffer.from('{"choices":[{"message":{"content":"€🌻"}}]}');
   await logger.push(bytes.subarray(0, 8)); await logger.push(bytes.subarray(8));
   await logger.finish(record, undefined, false);
-  const entries = await readdir(path); assert.equal(entries.length, 1);
-  const result = join(path, entries[0]);
+  // 60-day retention: the 61-day-old directory is removed, the 59-day-old one is kept.
+  const entries = await readdir(path);
+  assert(!entries.includes(basename(expired))); assert(entries.includes(basename(retained))); assert.equal(entries.length, 2);
+  const result = join(path, entries.find(name => name.endsWith(record.request_id)));
   assert.deepEqual((await readdir(result)).sort(), ['input.json', 'metadata.json']);
   assert((await readFile(join(result, 'input.json'), 'utf8')).includes('private input'));
   const metadata = JSON.parse(await readFile(join(result, 'metadata.json'), 'utf8'));
@@ -92,7 +96,7 @@ async function fixture(t, options = {}) {
       if (sql.startsWith('INSERT INTO api_requests')) return { insertId: 1 };
       if (sql.includes('FROM proxy_api_keys k')) return [{ id: 1, proxy_api_key_name: 'Test proxy key', user_id: 2, user_name: 'Test user', user_email: 'user@example.test', role_id: 7, role_name: 'Test role', role_status: 'ACTIVE', model_policy_id: 8, status: 'ACTIVE', user_status: suspended ? 'SUSPENDED' : 'ACTIVE', classification_handler_id: options.classification ? 9 : null, evaluation_script: options.script }];
       if (sql.includes('FROM classification_handlers')) return [{ api_url: 'https://classifier.example', encrypted_api_key: encrypt('classifier-secret', encryptionKey), json_template: '{"prompt":"${PROMPT}"}' }];
-      if (sql.includes('FROM model_policy_rules')) return options.policies || [{ model_pattern: '*', policy: 'ALLOW' }];
+      if (sql.includes('FROM role_model_policies')) return options.policies || [{ model_pattern: '*', policy: 'ALLOW' }];
       if (sql.includes('FROM role_upstream_assignments')) return [{ upstream_api_key_id: 3, upstream_name: 'Test upstream key', provider_id: 4, api_type: options.type, key_status: 'ACTIVE', provider_status: 'ACTIVE', api_url: 'https://mock.example/v1', encrypted_api_key: encrypt('upstream-secret', encryptionKey) }];
       if (sql.startsWith('UPDATE ') || sql.startsWith('INSERT ')) return { affectedRows: 1, insertId: 1 };
       if (sql.startsWith('SELECT ')) return [];
@@ -106,6 +110,8 @@ async function fixture(t, options = {}) {
   const app = createApp(db, { encryptionKey, modelDefault: 'ALLOW', bodyLimit: 10000, timeout: options.timeout || 1000 }, {
     debugLogDirectory: path, log: e => logs.push(e),
     fetchImpl: async (url, init) => {
+      // Model discovery runs before routing; answer it here so test upstreams only see inference calls.
+      if (new URL(url).pathname.endsWith('/models')) return Response.json({ data: [{ id: 'test' }] });
       if (options.fetchImpl) return options.fetchImpl(url, init);
       assert.equal(init.headers.get('authorization'), 'Bearer upstream-secret');
       const stream = JSON.parse(init.body).stream;

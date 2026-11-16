@@ -22,14 +22,19 @@ async function fixture(t, options = {}) {
     if (sql.startsWith('SELECT * FROM model_pricing')) return options.pricing ? [options.pricing] : [];
     if (sql.startsWith('INSERT INTO api_requests')) return { insertId: 1 };
     if (sql.includes('FROM proxy_api_keys k')) return [key];
-    if (sql.includes('FROM model_policy_rules')) return options.policies || [{ model_pattern: 'claude-*', policy: 'ALLOW' }];
+    if (sql.includes('FROM role_model_policies')) return options.policies || [{ model_pattern: 'claude-*', policy: 'ALLOW' }];
+    if (sql.includes('FROM role_upstream_model_aliases')) return [];
     if (sql.includes('FROM role_upstream_assignments')) return [assignment];
     if (sql.includes('FROM classification_handlers')) return [{ api_url: 'https://classifier.example', encrypted_api_key: encrypt('classifier-secret', encryptionKey), json_template: '{"prompt":"${PROMPT}"}' }];
     if (sql.startsWith('INSERT INTO usage_events')) { usage.push(Object.fromEntries(sql.slice(sql.indexOf('(') + 1, sql.indexOf(')')).split(',').map((name, i) => [name, params[i]]))); return { insertId: 1 }; }
     if (sql.startsWith('UPDATE api_requests SET user_id=')) records.push(params);
     return { affectedRows: 1 };
   }, async transaction(fn) { return fn(db); } };
-  const app = createApp(db, { encryptionKey, modelDefault: 'DENY', bodyLimit: options.bodyLimit || 10000, timeout: options.timeout || 5000 }, { log() {}, debugLogDirectory: options.debugLogDirectory, classificationCache: options.cache, fetchImpl: async (url, init) => { calls.push({ url: String(url), init }); return options.fetch ? options.fetch(url, init) : json(message); } });
+  const app = createApp(db, { encryptionKey, modelDefault: 'DENY', bodyLimit: options.bodyLimit || 10000, timeout: options.timeout || 5000 }, { log() {}, debugLogDirectory: options.debugLogDirectory, classificationCache: options.cache, fetchImpl: async (url, init) => {
+    // Model discovery runs before routing; answer it here and keep `calls` limited to classifier/inference requests.
+    if (new URL(url).pathname.endsWith('/models')) return json({ data: [{ id: 'claude-test' }, { id: 'claude-cheaper' }] });
+    calls.push({ url: String(url), init }); return options.fetch ? options.fetch(url, init) : json(message);
+  } });
   const server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
   t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
   const request = (body, path = '/v1/messages?beta=true', headers = {}, method = 'POST') => fetch(`http://127.0.0.1:${server.address().port}${path}`, { method, headers: { 'x-api-key': 'pak_client_test', 'content-type': 'application/json', 'anthropic-version': '2023-06-01', 'anthropic-beta': 'future-beta', ...headers }, body: method === 'GET' ? undefined : typeof body === 'string' ? body : JSON.stringify(body) });
@@ -50,7 +55,6 @@ test('Responses normalizes input, isolates cache and remaps only model', async t
       cache: { async get(key) { cacheKey = key; return null; }, async set() {} },
       fetch: (url, init) => {
         if (String(url).startsWith('https://classifier')) { classified = JSON.parse(JSON.parse(init.body).prompt); return json({}); }
-        if (String(url).endsWith('/models')) return json({ data: [{ id: 'claude-cheaper' }] });
         forwarded = JSON.parse(init.body); return json({ id: 'resp_test', output: [] });
       } });
     const body = { ...requestBody, input };
@@ -68,7 +72,6 @@ test('Responses prompt script receives original body and distinct input type', a
     prompt_script: 'async function prompt(input, input_type, limit, context) { if (input_type !== "OPENAI_RESPONSES" || input.input !== "Hello" || input.tools[0].name !== "lookup") throw new Error("wrong input"); return "custom prompt"; }' },
     fetch: (url, init) => {
       if (String(url).startsWith('https://classifier')) { prompt = JSON.parse(init.body).prompt; return json({}); }
-      if (String(url).endsWith('/models')) return json({ data: [{ id: 'claude-cheaper' }] });
       return json({ output: [] });
     } });
   const response = await send(f, requestBody); assert.equal(response.status, 200); await response.text(); assert.equal(prompt, 'custom prompt');
@@ -205,7 +208,6 @@ test('Responses classifier, cache, evaluation and remapping use compacted instru
         assert.equal(JSON.parse(JSON.parse(init.body).prompt)[0].content, 'Be brief');
         return json({});
       }
-      if (String(url).endsWith('/models')) return json({ data: [{ id: 'claude-cheaper' }] });
       assert.deepEqual(JSON.parse(init.body), { ...requestBody, model: 'claude-cheaper' });
       return json(message);
     } });

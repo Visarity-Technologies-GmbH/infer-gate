@@ -10,7 +10,6 @@ import { classificationCacheKey } from '../services/classification-cache.js';
 import { transformOutputStream } from '../services/output-stream.js';
 import { updateResponseOutput } from '../services/output-script.js';
 import { updateRequestInput } from '../services/input-script.js';
-import { updateScriptContext } from '../services/role-script-runner.js';
 import { evaluateClassification } from '../services/evaluation.js';
 import { supportsTokenBilling } from '../services/accounting.js';
 import { randomUUID } from 'node:crypto';
@@ -128,7 +127,6 @@ export function proxyHandler(db, config, { fetchImpl = fetch, debugLogDirectory,
         readStringCache: key => stringCache?.readStringCache(key) ?? null,
         writeStringCache: (key, value) => stringCache?.writeStringCache(key, value) ?? false,
       };
-      const needsScriptContext = key.input_script != null || key.output_script != null;
       let pendingCacheWrite;
       const cacheOptions = { signal: controller.signal, requestId: record.request_id };
       if (!counting && key.classification_handler_id != null && (meta.messages !== undefined || chatCompletion)) {
@@ -140,10 +138,10 @@ export function proxyHandler(db, config, { fetchImpl = fetch, debugLogDirectory,
         });
         const cacheKey = classificationCache ? classificationCacheKey(key, meta.messages, responses ? 'OPENAI_RESPONSES' : anthropic ? 'ANTHROPIC' : undefined, promptReplacement, context, classificationInput) : null;
         let cached = cacheKey ? await classificationCache.get(cacheKey, cacheOptions) : null;
-        if (cached && needsScriptContext && !cached.context) cached = null;
         let selectedModel;
         if (cached) {
-          if (needsScriptContext) updateScriptContext(context, structuredClone(cached.context), 'input_script');
+          // Cache entries hold only the routing decision. Script context is per request and is never
+          // stored or restored, so a hit cannot carry another request's user_id/request_id.
           record.classification_cache_hit = true;
           record.evaluation = { category: cached.category, sensitiveData: cached.sensitiveData, complexity: cached.complexity ?? null, models: null };
           selectedModel = cached.model;
@@ -177,7 +175,6 @@ export function proxyHandler(db, config, { fetchImpl = fetch, debugLogDirectory,
           if (cacheKey && selectedModel && availableCatalogues === catalogues.size) pendingCacheWrite = { key: cacheKey, value: {
             version: 1, model: selectedModel, category: record.evaluation.category, sensitiveData: record.evaluation.sensitiveData,
             complexity: record.evaluation.complexity,
-            ...(needsScriptContext ? { context: structuredClone(context) } : {}),
           } };
         }
         if (selectedModel !== meta.model) {

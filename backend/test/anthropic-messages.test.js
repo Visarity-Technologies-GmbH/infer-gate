@@ -23,14 +23,22 @@ async function fixture(t, options = {}) {
     if (sql.startsWith('SELECT * FROM model_pricing')) return options.pricing ? [options.pricing] : [];
     if (sql.startsWith('INSERT INTO api_requests')) return { insertId: 1 };
     if (sql.includes('FROM proxy_api_keys k')) return [key];
-    if (sql.includes('FROM model_policy_rules')) return options.policies || [{ model_pattern: 'claude-*', policy: 'ALLOW' }];
+    if (sql.includes('FROM role_upstream_model_aliases')) return [];
+    if (sql.includes('FROM role_model_policies')) return options.policies || [{ model_pattern: 'claude-*', policy: 'ALLOW' }];
     if (sql.includes('FROM role_upstream_assignments')) return [assignment];
     if (sql.includes('FROM classification_handlers')) return [{ api_url: 'https://classifier.example', encrypted_api_key: encrypt('classifier-secret', encryptionKey), json_template: '{"prompt":"${PROMPT}"}' }];
     if (sql.startsWith('INSERT INTO usage_events')) { usage.push(Object.fromEntries(sql.slice(sql.indexOf('(') + 1, sql.indexOf(')')).split(',').map((name, i) => [name, params[i]]))); return { insertId: 1 }; }
     if (sql.startsWith('UPDATE api_requests SET user_id=')) records.push(params);
     return { affectedRows: 1 };
   }, async transaction(fn) { return fn(db); } };
-  const app = createApp(db, { encryptionKey, modelDefault: 'DENY', bodyLimit: options.bodyLimit || 10000, timeout: options.timeout || 5000 }, { log() {}, classificationCache: options.cache, fetchImpl: async (url, init) => { calls.push({ url: String(url), init }); return options.fetch ? options.fetch(url, init) : json(message); } });
+  const app = createApp(db, { encryptionKey, modelDefault: 'DENY', bodyLimit: options.bodyLimit || 10000, timeout: options.timeout || 5000 }, { log() {}, classificationCache: options.cache, fetchImpl: async (url, init) => {
+    // Model discovery runs before routing; answer it in the provider's format and keep `calls` limited to classifier/inference requests.
+    if (new URL(url).pathname.endsWith('/models')) {
+      const models = options.models || ['claude-test', 'claude-cheaper', 'claude-updated', 'chat-test', 'anthropic.claude-opus-4-7'];
+      return json(assignment.api_type === 'GEMINI' ? { models: models.map(id => ({ name: `models/${id}` })) } : { data: models.map(id => ({ id })), has_more: false });
+    }
+    calls.push({ url: String(url), init }); return options.fetch ? options.fetch(url, init) : json(message);
+  } });
   const server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
   t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
   const request = (body = input, path = '/v1/messages?beta=true', headers = {}, method = 'POST') => fetch(`http://127.0.0.1:${server.address().port}${path}`, { method, headers: { 'x-api-key': 'pak_client_test', 'content-type': 'application/json', 'anthropic-version': '2023-06-01', 'anthropic-beta': 'future-beta', ...headers }, body: method === 'GET' ? undefined : typeof body === 'string' ? body : JSON.stringify(body) });
@@ -130,7 +138,6 @@ test('classification uses native top-level system and evaluation sees the origin
   const script = 'async function evaluate(input, input_type, classification, models, context) { if (input_type !== "ANTHROPIC") throw new Error("wrong protocol"); return { category: input.system[0].text, sensitiveData: false, complexity: 0, models: ["claude-cheaper"] }; }';
   const f = await fixture(t, { key: { classification_handler_id: 9, evaluation_script: script }, cache, fetch: (url, init) => {
     if (String(url).startsWith('https://classifier')) { classified = JSON.parse(JSON.parse(init.body).prompt); return json({ category: 'other' }); }
-    if (String(url).endsWith('/models')) return json({ data: [{ id: 'claude-cheaper' }], has_more: false });
     evaluated = JSON.parse(init.body); return json({ ...message, model: 'claude-cheaper' });
   } });
   const response = await f.request(); assert.equal(response.status, 200); await response.text();
@@ -186,7 +193,7 @@ test('native errors retain fixed Claude Code recovery cues without reflecting di
 });
 
 test('Claude Code model discovery accepts an x-api-key and still applies model policy', async t => {
-  const f = await fixture(t, { fetch: () => json({ data: [{ id: 'claude-test' }, { id: 'denied-model' }], has_more: false }) });
+  const f = await fixture(t, { models: ['claude-test', 'denied-model'] });
   const response = await f.request(input, '/v1/models?limit=1000', {}, 'GET'); assert.equal(response.status, 200);
   assert.deepEqual((await response.json()).data.map(model => model.id), ['claude-test']); assert.equal(f.usage.length, 0);
 });
@@ -302,7 +309,6 @@ test('native custom prompt receives full Anthropic input and passes context to e
     },
     fetch: (url, init) => {
       if (String(url).startsWith('https://classifier')) { classified = JSON.parse(JSON.parse(init.body).prompt); return json({}); }
-      if (String(url).endsWith('/models')) return json({ data: [{ id: 'claude-test' }], has_more: false });
       forwarded = JSON.parse(init.body); return json(message);
     },
   });

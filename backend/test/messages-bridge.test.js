@@ -119,18 +119,23 @@ test('bridge errors and malformed/incomplete streams never expose diagnostics or
 
 async function fixture(t, { type = 'OPENAI_COMPATIBLE', fetchImpl, cached, policies, timeout = 5000 } = {}) {
   const usage = [], records = [], costs = [], calls = [];
+  const models = ['local-model', 'claude-requested'];
   const db = { async query(sql, params) {
     if (sql.includes('FROM user_usage_limits') || sql.startsWith('SELECT * FROM model_pricing')) return [];
     if (sql.startsWith('INSERT INTO api_requests')) return { insertId: 1 };
     if (sql.includes('FROM proxy_api_keys k')) return [{ id: 1, user_id: 2, role_id: 7, role_status: 'ACTIVE', model_policy_id: 8, status: 'ACTIVE', user_status: 'ACTIVE', classification_handler_id: cached ? 9 : null }];
-    if (sql.includes('FROM model_policy_rules')) return policies || [{ model_pattern: '*', policy: 'ALLOW' }];
+    if (sql.includes('FROM role_model_policies')) return policies || [{ model_pattern: '*', policy: 'ALLOW' }];
     if (sql.includes('FROM role_upstream_assignments')) return [assignment(type)];
     if (sql.startsWith('INSERT INTO usage_events')) { usage.push(params); return { insertId: 1 }; }
     if (sql.startsWith('INSERT INTO usage_costs')) costs.push(params);
     if (sql.startsWith('UPDATE api_requests SET user_id=')) records.push(params);
     return { affectedRows: 1 };
   }, async transaction(fn) { return fn(db); } };
-  const app = createApp(db, { ...config, timeout }, { log() {}, classificationCache: cached ? { async get() { return { version: 1, model: 'local-model', category: 'other', sensitiveData: false, complexity: 0 }; } } : undefined, fetchImpl: async (url, init) => { calls.push({ url, init }); return fetchImpl ? fetchImpl(url, init) : json(completion()); } });
+  const app = createApp(db, { ...config, timeout }, { log() {}, classificationCache: cached ? { async get() { return { version: 1, model: 'local-model', category: 'other', sensitiveData: false, complexity: 0 }; } } : undefined, fetchImpl: async (url, init) => {
+    // Model discovery runs before routing; answer it here and keep `calls` limited to inference requests.
+    if (new URL(url).pathname.endsWith('/models')) return json(type === 'GEMINI' ? { models: models.map(id => ({ name: `models/${id}` })) } : { data: models.map(id => ({ id })) });
+    calls.push({ url, init }); return fetchImpl ? fetchImpl(url, init) : json(completion());
+  } });
   const server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
   t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
   const request = (body = input, path = '/v1/messages?beta=true') => fetch(`http://127.0.0.1:${server.address().port}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': 'pak_client' }, body: JSON.stringify(body) });

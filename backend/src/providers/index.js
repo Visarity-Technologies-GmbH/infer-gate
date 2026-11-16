@@ -23,12 +23,14 @@ export function prepareProviderRequest(assignment, req, body, config, signal) {
   }
   if (['OPENAI_COMPATIBLE', 'OPENAI_ANTHROPIC', 'AWS_BEDROCK'].includes(type)) {
     const path = req.url.split('?')[0];
+    // Resolve the trusted upstream URL first so configuration errors (e.g. an invalid Bedrock region) win over body parsing.
+    const url = upstreamUrl(type === 'AWS_BEDROCK' ? bedrockBaseUrl(assignment.aws_region) : assignment.api_url, req.url);
     const endpoint = /^\/responses\/?$/.test(path) ? 'responses' : /^\/messages(?:\/|$)/.test(path) ? 'messages' : 'chat';
     const compression = providerCompression(assignment, endpoint);
     const headers = requestHeaders(req, credential), rawPayload = ['GET','HEAD'].includes(req.method) ? undefined : accountingBody(req, body);
     const payload = compressBody(rawPayload, compression);
     if (payload !== undefined && compression !== 'NONE') headers.set('content-encoding', compression.toLowerCase());
-    return { url: upstreamUrl(type === 'AWS_BEDROCK' ? bedrockBaseUrl(assignment.aws_region) : assignment.api_url, req.url), init: { method: req.method, headers, body: payload, signal, redirect: 'manual' }, type };
+    return { url, init: { method: req.method, headers, body: payload, signal, redirect: 'manual' }, type };
   }
   if (!['ANTHROPIC','GEMINI'].includes(type)) fail(503, 'invalid_provider_type', 'Unknown provider API type');
   const path = req.url.split('?')[0];

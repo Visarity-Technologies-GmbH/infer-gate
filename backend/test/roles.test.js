@@ -15,10 +15,10 @@ const options = {
   password: process.env.DB_PASSWORD,
 };
 test("roles require a policy, a name and valid status", () => {
-  assert.deepEqual(roleData({ name: " Team ", model_policy_id: 1 }), [
+  assert.deepEqual(roleData({ name: " Team ", model_policy_ids: [1] }), [
     "Team",
     null,
-    "1",
+    ["1"],
     "ACTIVE",
     null,
     null,
@@ -31,14 +31,16 @@ test("roles require a policy, a name and valid status", () => {
     null,
     {},
     { name: "x" },
-    { name: "x", model_policy_id: null },
-    { name: "x", model_policy_id: 1, status: "BAD" },
-    { name: "x", model_policy_id: 1, extra: true },
+    { name: "x", model_policy_ids: [] },
+    { name: "x", model_policy_ids: null },
+    { name: "x", model_policy_id: 1 },
+    { name: "x", model_policy_ids: [1], status: "BAD" },
+    { name: "x", model_policy_ids: [1], extra: true },
   ])
     assert.throws(() => roleData(body), { status: 400 });
 });
 test("optional role scripts validate syntax without execution and normalize blank values", () => {
-  const base = { name: "Scripts", model_policy_id: 1 };
+  const base = { name: "Scripts", model_policy_ids: [1] };
   for (const [index, field] of ["prompt_script", "input_script", "output_script"].entries()) {
     for (const value of [null, "", "  "])
       assert.equal(roleData({ ...base, [field]: value })[6 + index], null);
@@ -76,7 +78,7 @@ test("role administration requires administrator authentication", async (t) => {
     );
 });
 test("role classification assignments are optional, validated and administrator-only", async (t) => {
-  const input = { name: "Classification role", model_policy_id: 1 };
+  const input = { name: "Classification role", model_policy_ids: [1] };
   assert.equal(roleData(input)[4], null);
   assert.equal(roleData({ ...input, classification_handler_id: null })[4], null);
   assert.equal(roleData({ ...input, classification_handler_id: 7 })[4], "7");
@@ -85,22 +87,21 @@ test("role classification assignments are optional, validated and administrator-
 
   const roles = [];
   let writes = 0;
-  const db = {
-    async query(sql, params) {
+  const query = async (sql, params) => {
       if (sql.startsWith("SELECT token_hash"))
         return params[0] === digest("adm_role_classification") ? [{ token_hash: params[0] }] : [];
       if (sql.startsWith("INSERT INTO roles") || sql.startsWith("UPDATE roles SET")) {
         const hasHandler = sql.includes("classification_handler_id");
-        const handlerId = hasHandler ? params[4] : undefined;
+        const handlerId = hasHandler ? params[3] : undefined;
         if (handlerId != null && !["7", "8"].includes(handlerId))
           throw Object.assign(new Error("Missing related record"), { code: "ER_NO_REFERENCED_ROW_2" });
         const inserting = sql.startsWith("INSERT");
         const row = inserting ? { id: String(roles.length + 1) } : roles.find(r => r.id === params.at(-1));
         if (!row) return { affectedRows: 0 };
-        const [name, description, model_policy_id, status] = params;
-        Object.assign(row, { name, description, model_policy_id, status });
+        const [name, description, status] = params;
+        Object.assign(row, { name, description, status });
         if (hasHandler) row.classification_handler_id = handlerId;
-        let scriptIndex = 4 + Number(hasHandler) + Number(sql.includes("evaluation_script"));
+        let scriptIndex = 3 + Number(hasHandler) + Number(sql.includes("evaluation_script"));
         for (const field of ["prompt_script", "input_script", "output_script"]) {
           if (sql.includes(field)) row[field] = params[scriptIndex++];
         }
@@ -108,11 +109,20 @@ test("role classification assignments are optional, validated and administrator-
         writes++;
         return inserting ? { insertId: row.id } : { affectedRows: 1 };
       }
+      if (sql.startsWith("DELETE FROM role_model_policies")) {
+        roles.find(r => r.id === params[0]).model_policy_ids = [];
+        return { affectedRows: 1 };
+      }
+      if (sql.startsWith("INSERT INTO role_model_policies")) {
+        const row = roles.find(r => r.id === String(params[0]));
+        row.model_policy_ids = [...(row.model_policy_ids || []), params[1]];
+        return { affectedRows: 1 };
+      }
+      if (sql.startsWith("SELECT r.*") && sql.includes("WHERE r.id=?")) return roles.filter(r => r.id === params[0]);
       if (sql.startsWith("SELECT r.*")) return roles.filter(r => Number(r.id) > Number(params[0])).map(r => ({ ...r, assigned_keys: 0 }));
-      if (sql === "SELECT * FROM roles WHERE id=?") return roles.filter(r => r.id === params[0]);
       throw new Error("Unexpected database operation");
-    },
   };
+  const db = { query, transaction: run => run({ query }) };
   const server = createApp(db, {}).listen(0, "127.0.0.1");
   await new Promise((resolve, reject) => { server.once("listening", resolve); server.once("error", reject); });
   t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
@@ -129,6 +139,7 @@ test("role classification assignments are optional, validated and administrator-
   assert.equal(writes, 0);
   assert.equal((await call("POST", input)).status, 201);
   assert.equal(roles[0].classification_handler_id, null);
+  assert.deepEqual(roles[0].model_policy_ids, ["1"]);
   assert.equal((await call("POST", { ...input, name: "Assigned", classification_handler_id: 7 })).status, 201);
   assert.equal(roles[1].classification_handler_id, "7");
   assert.equal((await call("PUT", { ...input, classification_handler_id: "7" }, "/1")).status, 204);
@@ -368,12 +379,13 @@ test("role models discover fresh permitted IDs and reject unavailable roles or f
   let status = "ACTIVE", failed = false, calls = 0;
   const db = { async query(sql, params) {
     if (sql.startsWith("SELECT token_hash")) return [{ token_hash: params[0] }];
-    if (sql === "SELECT * FROM roles WHERE id=?") return params[0] === "1" ? [{ id: "1", status, model_policy_id: "2" }] : [];
+    if (sql === "SELECT * FROM roles WHERE id=?") return params[0] === "1" ? [{ id: "1", status }] : [];
     if (sql.includes("FROM role_upstream_assignments")) return ["ACTIVE", "ACTIVE", "DISABLED"].map((key_status, index) => ({
       upstream_api_key_id: index + 1, provider_id: 1, key_status, provider_status: "ACTIVE",
       encrypted_api_key: encrypt("test-secret", encryptionKey), api_url: "https://provider.example/v1", api_type: "OPENAI_COMPATIBLE",
     }));
-    if (sql.includes("FROM model_policy_rules")) return [{ model_pattern: "allowed-*", policy: "ALLOW" }];
+    if (sql.includes("FROM role_upstream_model_aliases")) return [];
+    if (sql.includes("FROM role_model_policies")) return [{ model_policy_id: "2", model_pattern: "allowed-*", policy: "ALLOW" }];
     throw new Error("Unexpected query");
   } };
   const server = createApp(db, { encryptionKey, modelDefault: "DENY" }, { fetchImpl: async () => {

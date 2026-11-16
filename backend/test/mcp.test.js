@@ -32,9 +32,10 @@ test('MCP authenticates every request and dispatches only matching allowlisted o
       assert.deepEqual(params, ['3']);
       return [{ model_pattern: '*', policy: 'DENY' }, { model_pattern: 'fast', policy: 'ALLOW' }];
     }
+    if (sql.includes('FROM role_upstream_model_aliases')) return [];
     if (sql.includes('FROM role_upstream_assignments')) {
       assert.deepEqual(params, ['3']);
-      return [assignment];
+      return [{ ...assignment }];
     }
     if (sql.includes('FROM `llm_inference_providers`')) {
       assert.deepEqual(params, ['2']);
@@ -93,7 +94,7 @@ test('MCP authenticates every request and dispatches only matching allowlisted o
   assert.deepEqual(JSON.parse(policy.result.content[0].text).rules,
     [{ model_pattern: '*', policy: 'DENY' }, { model_pattern: 'fast', policy: 'ALLOW' }]);
   const assignments = await (await post('tools/call', { name: 'list_role_upstreams', arguments: { id: 3 } })).json();
-  assert.deepEqual(JSON.parse(assignments.result.content[0].text).data, [assignment]);
+  assert.deepEqual(JSON.parse(assignments.result.content[0].text).data, [{ ...assignment, model_alias_ids: [] }]);
   const replace = async rows => (await (await post('tools/call', {
     name: 'set_role_upstreams', arguments: { id: 3, assignments: rows }
   })).json()).result;

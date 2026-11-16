@@ -93,7 +93,7 @@ test('failed accounting commits preserve failure metadata', async t => {
     async query(sql) {
       if (sql.startsWith('INSERT INTO api_requests')) return { insertId: 1 };
       if (sql.includes('FROM proxy_api_keys k')) return [{ id: 1, user_id: 2, role_id: 3, role_status: 'ACTIVE', status: 'ACTIVE', user_status: 'ACTIVE' }];
-      if (sql.includes('FROM user_usage_limits') || sql.includes('FROM model_policy_rules')) return [];
+      if (sql.includes('FROM user_usage_limits') || sql.includes('FROM role_model_policies')) return [];
       if (sql.includes('FROM role_upstream_assignments')) return [{ upstream_api_key_id: 4, provider_id: 5, key_status: 'ACTIVE', provider_status: 'ACTIVE', api_type: 'OPENAI_COMPATIBLE', api_url: 'https://test.example/v1', encrypted_api_key: encrypt('test-key', encryptionKey) }];
       if (sql.includes('usage_expected=TRUE')) expected = true;
       if (sql.includes("error_code='accounting_write_failed'")) marked = true;
@@ -101,7 +101,9 @@ test('failed accounting commits preserve failure metadata', async t => {
     },
     transaction() { throw new Error('Simulated accounting rollback'); }
   };
-  const server = createApp(db, { encryptionKey, timeout: 1000, bodyLimit: 10000, modelDefault: 'ALLOW' }, { log() {}, fetchImpl: async () => Response.json({ usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } }) }).listen(0, '127.0.0.1');
+  const server = createApp(db, { encryptionKey, timeout: 1000, bodyLimit: 10000, modelDefault: 'ALLOW' }, { log() {}, fetchImpl: async url => new URL(url).pathname.endsWith('/models')
+    ? Response.json({ data: [{ id: 'test' }] })
+    : Response.json({ usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } }) }).listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
   t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
   await assert.rejects(async () => {

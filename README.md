@@ -7,7 +7,7 @@ InferGate lets teams share access to AI providers without sharing vendor credent
 - **Provider access:** use OpenAI-compatible clients or the Anthropic Messages API with supported OpenAI-compatible, Anthropic, Gemini, and AWS Bedrock Mantle models. See [Claude Code setup and compatibility](backend/README.md#incoming-anthropic-messages-and-claude-code) for provider-specific limits.
 - **Prompt classification and usage analysis.** Administrators can configure a role to send the system and user messages from eligible requests to a classification endpoint backed by a model such as Jev. The role’s evaluation script interprets the classifier response and labels each workload by category, sensitivity, and optional complexity. Usage reports count recorded events by category and complexity, so a team can see, for example, how often it uses AI for routine rewriting versus complex analysis. Teams can use these reports even when they keep the originally requested model.
 - **Model selection and cost savings.** The evaluation script can rank candidate models for each request. For example, a role can send a short rewriting task to a model with lower per-token prices and keep the requested model for complex analysis. InferGate selects the first available candidate and enforces the role’s model policy before forwarding. When pricing is available for both models, usage reports compare the estimated cost of the recorded tokens at the requested and selected models’ rates.
-- **Debug logs.** Administrators can enable **Settings → Chat completion debug logging** to inspect individual Chat Completions and Anthropic Messages requests. Logs can contain prompt and response content, the classifier exchange, and the evaluation result when those steps run. Capture is off by default and has a seven-day retention period. [Debug log details](backend/README.md#chat-completion-and-messages-debug-logs)
+- **Debug logs.** Administrators can enable **Settings → Chat completion debug logging** to inspect individual Chat Completions and Anthropic Messages requests. Logs can contain prompt and response content, the classifier exchange, and the evaluation result when those steps run. Capture is off by default and has a 60-day retention period. [Debug log details](backend/README.md#chat-completion-and-messages-debug-logs)
 - **Accounting:** report tokens and estimated costs by user, model, or provider, filter by group, and set daily or weekly user caps. Pricing supports [Claude cache-write durations](backend/README.md#five-minute-and-one-hour-cache-writes).
 - **Delegated access:** managers can manage users, groups, and proxy keys and view organization-wide reports. Private read-only usage links let individual users check their own consumption, estimated cost, and remaining allowance.
 
@@ -26,7 +26,7 @@ The steps below run the backend and dashboard locally. You need **Node.js 24 or 
 Open a new terminal and check `node --version` and `npm --version`. Download and extract the repository source, or clone it with Git:
 
 ```sh
-git clone https://gogs.visarity.com/bastianzuehlke/infer-gate.git
+git clone https://github.com/Visarity-Technologies-GmbH/infer-gate.git
 cd infer-gate
 ```
 
@@ -37,9 +37,9 @@ For SQLite, skip the MySQL installation and SQL setup in this section. In `backe
 Connect as a MySQL administrator (for example, `mysql -u root -p`). Run the following SQL, replacing the password placeholder with a new password. The grant lets this local account apply InferGate migrations within its own database.
 
 ```sql
-CREATE DATABASE InferGate CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
-CREATE USER 'infergate'@'localhost' IDENTIFIED BY 'replace-with-a-local-password';
-GRANT ALL PRIVILEGES ON InferGate.* TO 'infergate'@'localhost';
+CREATE DATABASE IGDB CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+CREATE USER 'iguser'@'localhost' IDENTIFIED BY 'replace-with-a-local-password';
+GRANT ALL PRIVILEGES ON IGDB.* TO 'iguser'@'localhost';
 ```
 
 ### 3. Configure the backend

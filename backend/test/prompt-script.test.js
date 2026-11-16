@@ -39,13 +39,16 @@ test('null scripts preserve legacy prompt; custom empty strings are not replaced
   assert.equal(JSON.parse('"' + long + '"'), 'longer than limit');
 });
 
-test('custom prompt cache identity includes source, escaped output, protocol and context', () => {
+test('custom prompt cache identity uses escaped output and protocol, not context or script source', () => {
   const role = { role_id: 1, classification_handler_id: 1, prompt_script: 'async function prompt() { return "x"; }' };
   const key = classificationCacheKey(role, [], 'ANTHROPIC', 'x', { a: 1 });
   assert.notEqual(key, classificationCacheKey(role, [], 'OPENAI', 'x', { a: 1 }));
   assert.notEqual(key, classificationCacheKey(role, [], 'ANTHROPIC', 'y', { a: 1 }));
-  assert.notEqual(key, classificationCacheKey(role, [], 'ANTHROPIC', 'x', { a: 2 }));
-  assert.notEqual(key, classificationCacheKey({ ...role, prompt_script: role.prompt_script + '\n' }, [], 'ANTHROPIC', 'x', { a: 1 }));
+  // Per-request context (e.g. request_id) must not split the cache.
+  assert.equal(key, classificationCacheKey(role, [], 'ANTHROPIC', 'x', { a: 2, request_id: 'other' }));
+  // Script edits still invalidate entries through the role's updated_at.
+  assert.equal(key, classificationCacheKey({ ...role, prompt_script: role.prompt_script + '\n' }, [], 'ANTHROPIC', 'x', { a: 1 }));
+  assert.notEqual(key, classificationCacheKey({ ...role, role_updated_at: '2026-11-16T00:00:00Z' }, [], 'ANTHROPIC', 'x', { a: 1 }));
 });
 
 test('prompt failures and unsafe access are sanitized and bounded', async () => {
