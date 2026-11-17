@@ -2,7 +2,7 @@
 
 ![InferGate](infergate.jpg)
 
-InferGate lets teams share access to AI providers without sharing vendor credentials. Applications call one gateway with their own proxy keys. Administrators use a web dashboard to control which models each key can use, track consumption, and reduce token costs by routing simpler prompts to lower-priced models.
+InferGate lets teams share access to AI providers without sharing vendor credentials. Applications call one gateway with their own proxy keys. Administrators use a web dashboard to control which models each key can use, track consumption, and reduce token costs by routing simpler prompts to lower-priced models (requires coding skills).
 
 ## Features
 
@@ -92,6 +92,71 @@ Open the [dashboard](http://127.0.0.1:5173). On first launch, enter your bootstr
 2. Create a model policy allowing a model from that provider. Create an active role using the policy and assign the upstream key to it.
 3. Create a user, issue a proxy key for that user, and assign the role to the proxy key. Copy the proxy key when it is shown.
 4. Set your OpenAI-compatible client's base URL to `http://127.0.0.1:3000/v1` and use the **proxy key** as its API key. List models or send a chat completion using an allowed model ID.
+
+## Documentation
+
+This chapter briefly explains the dashboard's building blocks. Access follows this chain: a **user** owns **proxy API keys**; a key has one **role**; the role references a **model policy** and prioritized **upstream API keys**, which belong to **inference providers**.
+
+### Roles
+
+A role is a reusable access and routing profile. It has a name, a status (active or disabled), one required model policy, prioritized upstream key assignments and an optional classification handler with an evaluation script. Many proxy keys can share one role, so editing a role affects all of them. Disabling a role blocks its keys. **Show models** lists the models the role can currently use.
+
+Roles can run up to four optional JavaScript scripts (each at most 32,768 characters, executed in a restricted process with a short time limit). **Reset to default** restores the default evaluation script.
+
+- **Prompt script** (`prompt(input, input_type, limit, context)`): builds the text sent to the classifier, replacing the default reduction and truncation of messages. It returns a string.
+- **Evaluation script** (`evaluate(input, input_type, classification, models, context)`): interprets the classifier's answer. It returns a category, a sensitivity flag, an optional complexity (0 easy, 1 medium, 2 hard) and an ordered list of preferred model IDs. The first available candidate replaces the requested model if the model policy allows it.
+- **Input script** (`updateInput(input, input_type, context)`): changes the request after classification and model selection and before it goes to the provider. It returns the new request body.
+- **Output script** (`updateOutput(output, output_type, context)`): changes the response (or each streamed event) before it goes to the client. Usage and costs are still accounted from the provider's original counters.
+
+Roles can also enable **system prompt compaction** (removing comments, minifying JSON, compacting lists, cleaning whitespace) to shorten system prompts before classification.
+
+### Groups
+
+Groups organize users, for example by team or department. They don't grant access or set budgets. Use them to filter usage and cost reports. Selecting several groups shows the union of their members without double counting. Memberships can be edited directly on the Groups page.
+
+### Users
+
+A user is an employee or application owner. Users can be suspended and reactivated, which blocks all their proxy keys. Each user can have an optional daily or weekly **usage cap**, measured in millions of tokens or estimated USD across all their keys. New requests are rejected once 95% of the cap is consumed. **Usage link** generates a private, read-only page where the user sees their own usage, cost and remaining allowance. Administrators can also promote a user to **manager** (see MCP tokens below and the Delegated access feature).
+
+### Model policies
+
+A model policy is a named list of ALLOW or DENY rules for model IDs. Patterns are case-sensitive and may contain `*`. Exact rules win over wildcard patterns, which win over the catch-all `*`; if nothing matches, the `MODEL_DEFAULT` setting applies (DENY by default). Within the same level, DENY wins. The policy is checked against the model actually sent to the provider, after any remapping.
+
+### Model aliases
+
+A model alias maps a name that clients use to the model ID a provider actually advertises, for example `my-fast-model` to a provider-specific ID. Alias sets are assigned to individual upstream assignments within a role. If no upstream advertises the requested model exactly, the first assignment with a matching alias whose target it advertises is used, and the request's model is replaced by that target. The role's model policy is then checked against the target model. Pricing aliases (see below) are separate and affect only cost estimation.
+
+### Inference providers
+
+A provider is a trusted endpoint configured by the administrator: a name, an API base URL and an API type: `OPENAI_COMPATIBLE`, `ANTHROPIC`, `GEMINI`, `AWS_BEDROCK` or `OPENAI_ANTHROPIC`. The last one has an optional separate Anthropic base URL and forwards `/v1/messages` natively. Disabling a provider stops routing to it. The API type of a provider can't be switched to or from Bedrock while it has upstream keys.
+
+### Upstream API keys
+
+An upstream key is the vendor credential for one provider. It is stored encrypted and never shown again; only a safe fingerprint is displayed. The credential can also be a `$ENV_NAME` reference resolved on each call. AWS Bedrock keys also need a region. The dashboard checks keys automatically and **Show models** lists the models a key advertises. Rotate a credential by editing the key, or disable the key to stop its use.
+
+### Proxy API keys
+
+A proxy key is what employees and applications use as their API key. Each key belongs to a user, has a name, one optional role and an optional expiry time. The full key is shown only once on creation. Revoking a key, expiry, suspending the user or unassigning the role blocks later requests without touching the vendor credentials. Keys can be renamed and, by administrators and managers, assigned a role.
+
+### Classification handlers
+
+A classification handler describes the classifier endpoint used by roles: a URL, an encrypted bearer credential, a JSON request template (default `{"prompt":"${PROMPT}"}`) and an optional `maxToken` character budget (default 30,000; 90% of it is used for the prompt). The classifier receives the reduced system and user messages. Its answer is interpreted by the role's evaluation script. A classifier failure stops the request.
+
+### MCP tokens
+
+The **MCP tokens** page creates named personal credentials for MCP clients, valid through a chosen UTC date. Copy the token when it is shown, because only its digest is stored. A token has a scope: REPORT (default, `/report/mcp`), MANAGER (`/manager/mcp`) or ADMIN (`/admin/mcp`, issued by administrators only). Administrators see and revoke all tokens; managers see their own. To rotate a token, create a replacement, update the client and revoke the old one. Suspending or demoting a manager revokes their tokens.
+
+### Pricing setup
+
+Estimated costs use current prices, with manual prices taking precedence over imported prices. Everything is configured in **Settings**:
+
+1. **Import prices.** Preview the pricing feed, review it and apply it.
+2. **Map providers.** For each InferGate provider, select the matching pricing provider. Names and API types aren't matched automatically.
+3. **Add aliases.** Where a model ID differs from the catalog's, add an alias, for example `gpt-4o` to `openai/gpt-4o`. Date-specific response model IDs may need aliases too.
+4. **Add manual overrides** for models without a feed price or with negotiated rates: input, output, cache-read and cache-write rates in USD per million tokens, plus optional five-minute and one-hour cache-write rates. **Update Claude Pricing** stages Anthropic's published rates, which you still save per row.
+5. **Recalculate if needed.** Price changes don't alter past estimates. Use **Usage maintenance → recalculate** for a date range.
+
+Costs are estimates, not invoices. Unmatched models show up as unpriced in reports.
 
 ## Deployment and documentation
 

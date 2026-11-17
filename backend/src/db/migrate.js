@@ -1,9 +1,9 @@
 import mysql from 'mysql2/promise';
-import { readdir, readFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 
 async function migrateSqlite() {
   const configured = process.env.DB_ENABLED ?? 'true';
@@ -15,16 +15,22 @@ async function migrateSqlite() {
   const schemaUrl = new URL('./sqlite-schema.sql', import.meta.url);
   const schema = await readFile(schemaUrl, 'utf8');
   const checksum = createHash('sha256').update(schema).digest('hex');
+  const providers = await readFile(new URL('./sqlite-providers.sql', import.meta.url), 'utf8');
+  if (absolutePath !== ':memory:') await mkdir(dirname(absolutePath), { recursive: true });
   const database = new DatabaseSync(absolutePath, { enableForeignKeyConstraints: true, timeout: 5000 });
   try {
-    database.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');
+    database.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; BEGIN IMMEDIATE;');
     const hasHistory = database.prepare("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get();
     const previous = hasHistory ? database.prepare('SELECT checksum FROM schema_migrations WHERE name=?').get('sqlite-schema.sql') : null;
     if (previous && previous.checksum !== checksum) {
       throw new Error('SQLite schema changed after it was applied; add a versioned SQLite migration before upgrading this database');
     }
     database.exec(schema);
-    if (!previous) database.prepare('INSERT INTO schema_migrations(name,checksum) VALUES (?,?)').run('sqlite-schema.sql', checksum);
+    if (!previous) {
+      database.exec(providers);
+      database.prepare('INSERT INTO schema_migrations(name,checksum) VALUES (?,?)').run('sqlite-schema.sql', checksum);
+    }
+    database.exec('COMMIT');
     console.log(`SQLite database ready at ${absolutePath}`);
   } finally {
     database.close();

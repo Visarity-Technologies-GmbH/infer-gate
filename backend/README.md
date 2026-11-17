@@ -27,7 +27,7 @@ The default listener is `127.0.0.1:3000`. `GET /health` checks the process; `GET
 
 Keep `.env` private. Preserve the encryption key securely: changing it without re-encrypting credentials makes existing upstream keys unusable. Production should supply environment secrets externally, use TLS at a trusted reverse proxy, restrict `/admin`, and use a dedicated runtime database account with only necessary permissions. The server does not trust forwarded IP headers or enable cross-origin access. A same-origin dashboard can use `/admin`.
 
-SQLite uses its own checksum-checked schema snapshot, created with `npm run migrate` just like the MySQL schema. SQLite is intended for local, single-process use: its Node API is synchronous and SQLite serializes writes, so large reports or heavy write traffic can pause requests. Use MySQL for multi-instance or sustained production workloads. The two database files are independent; changing `DB_ENABLED` does not copy or migrate data between them.
+SQLite uses its own checksum-checked schema snapshot, created with `npm run migrate` just like the MySQL schema. Fresh SQLite databases include the same OpenAI, Anthropic, Gemini and AWS Bedrock provider entries as MySQL. SQLite is intended for local, single-process use: its Node API is synchronous and SQLite serializes writes, so large reports or heavy write traffic can pause requests. Use MySQL for multi-instance or sustained production workloads. The two database files are independent; changing `DB_ENABLED` does not copy or migrate data between them.
 
 ## Administrator bootstrap
 
