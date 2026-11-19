@@ -14,8 +14,8 @@ export function validateEvaluationResult(result) {
   return { category: result.category, sensitiveData: result.sensitiveData, complexity: result.complexity ?? null, models: result.models };
 }
 
-export async function evaluateClassification(script, input, classification, models, { signal, inputType = 'OPENAI', context = {}, helpers } = {}) {
-  const result = await runRoleScript({ mode: 'evaluation', script: script ?? DEFAULT_EVALUATION_SCRIPT, input, inputType, classification, models, context }, { signal, helpers });
+export async function evaluateClassification(script, input, classification, models, { signal, inputType = 'OPENAI', context = {}, helpers, scriptTimeouts } = {}) {
+  const result = await runRoleScript({ mode: 'evaluation', script: script ?? DEFAULT_EVALUATION_SCRIPT, input, inputType, classification, models, context }, { signal, helpers, scriptTimeouts });
   const evaluation = validateEvaluationResult(result?.value);
   updateScriptContext(context, result.context, 'evaluation');
   return evaluation;

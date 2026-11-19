@@ -1,0 +1,62 @@
+{
+  "request_id": "55eda0a6-16ab-44d3-8f74-6aec8bc51259",
+  "started_at": "2026-11-17T14:14:40.157Z",
+  "endpoint": "/v1/chat/completions",
+  "http_method": "POST",
+  "user_id": "1",
+  "user_name": "User",
+  "user_email": "user@example.com",
+  "role_id": "1",
+  "role_name": "All",
+  "upstream_id": "4",
+  "upstream_name": "Spark vLLM",
+  "proxy_api_key_id": "1",
+  "proxy_api_key_name": "User All",
+  "completed_at": "2026-11-17T14:14:46.343Z",
+  "model": "qwen3.8-flash-next",
+  "classification_cache_hit": false,
+  "stream": true,
+  "http_status": 200,
+  "request_status": "SUCCESS",
+  "output_complete": true,
+  "output_truncated": false,
+  "output": {
+    "object": "chat.completion",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "\n\n[\n  \"Germany\",\n  \"Italy\",\n  \"France\",\n  \"Spain\",\n  \"Denmark\",\n  \"Sweden\",\n  \"Finland\"\n]",
+          "reasoning": "We need respond to user: \"Create a json list of all the asked countries.\" We need include all asked countries: Germany, Italy, France, Spain, Denmark, Sweden, Finland. Likely JSON list. Need maybe format as JSON array of objects? \"json list\" ambiguous. Could be list of countries. Since asked capitals earlier, maybe create JSON list of all asked countries with capitals. But phrase \"all the asked countries\" likely country names. Need return only response following instructions. Use JSON. Could be:\n[\n  \"Germany\",\n  \"Italy\",\n  \"France\",\n  \"Spain\",\n  \"Denmark\",\n  \"Sweden\",\n  \"Finland\"\n]\nBut maybe include capitals because context? \"Create a json list of all the asked countries.\" Not capitals. Need only countries. Ensure valid JSON. Final with code block? User says create json list. Could output raw JSON. Need no extra.\n"
+        },
+        "finish_reason": "stop"
+      }
+    ],
+    "id": "chatcmpl-9762dba9ec36c107",
+    "created": 1794924880,
+    "model": "qwen3.8-flash-next",
+    "system_fingerprint": "vllm-0.32.0-cdcfc334",
+    "usage": {
+      "prompt_tokens": 289,
+      "total_tokens": 528,
+      "completion_tokens": 239,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "created_cache_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 196
+      }
+    }
+  },
+  "usage": {
+    "model": "qwen3.8-flash-next",
+    "input_tokens": 289,
+    "cached_input_tokens": 0,
+    "cache_write_input_tokens": null,
+    "output_tokens": 239,
+    "reasoning_tokens": 196,
+    "total_tokens": 528
+  }
+}

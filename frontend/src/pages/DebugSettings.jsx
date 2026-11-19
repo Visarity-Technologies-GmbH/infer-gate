@@ -18,6 +18,7 @@ export function DebugSettings({ api }) {
   };
   return <section className="panel settings">
     <h2>Debug logging</h2>
+    <p>Logging requires both this global switch and the role’s Debug logging setting to be enabled. Roles default to disabled.</p>
     <p>Save complete request bodies, response content, reported token usage, classification request bodies and results, and evaluation results (when a handler is assigned) for /v1/chat/completions, /v1/messages, and /v1/responses in backend/logs, including streaming responses.</p>
     <p>Logs can contain confidential content and secrets included in requests. Access is restricted to the backend filesystem owner. Logs older than 60 days are removed when new logs are created. Disabling applies to new calls; existing calls finish logging.</p>
     <ErrorBox error={error}/>

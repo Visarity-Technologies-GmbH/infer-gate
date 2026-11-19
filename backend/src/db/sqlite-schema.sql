@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS classification_handlers (
 CREATE TABLE IF NOT EXISTS roles (
   id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL COLLATE NOCASE UNIQUE, description TEXT,
   status TEXT NOT NULL DEFAULT 'ACTIVE', classification_handler_id INTEGER REFERENCES classification_handlers(id),
+  debug_enabled INTEGER NOT NULL DEFAULT 0 CHECK (debug_enabled IN (0,1)),
   evaluation_script TEXT, prompt_script TEXT, input_script TEXT, output_script TEXT, system_prompt_compaction TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

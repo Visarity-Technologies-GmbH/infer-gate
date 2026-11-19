@@ -23,7 +23,11 @@ async function migrateSqlite() {
     const hasHistory = database.prepare("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get();
     const previous = hasHistory ? database.prepare('SELECT checksum FROM schema_migrations WHERE name=?').get('sqlite-schema.sql') : null;
     if (previous && previous.checksum !== checksum) {
-      throw new Error('SQLite schema changed after it was applied; add a versioned SQLite migration before upgrading this database');
+      if (previous.checksum !== '24c67ab8b5dd975ac18e036147f2d8b0f0c6b986f3e265d489aff5f735110dde')
+        throw new Error('SQLite schema changed after it was applied; add a versioned SQLite migration before upgrading this database');
+      // Upgrade the supported snapshot without adopting unknown schema histories.
+      database.exec(await readFile(new URL('./sqlite-migrations/002_role_debug_enabled.sql', import.meta.url), 'utf8'));
+      database.prepare('UPDATE schema_migrations SET checksum=? WHERE name=?').run(checksum, 'sqlite-schema.sql');
     }
     database.exec(schema);
     if (!previous) {

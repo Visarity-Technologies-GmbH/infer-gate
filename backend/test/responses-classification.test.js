@@ -12,7 +12,7 @@ const message = { id: 'resp_test', output: [] };
 const json = (value, status = 200, headers = {}) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json', ...headers } });
 async function fixture(t, options = {}) {
   const encryptionKey = randomBytes(32), calls = [], queries = [], usage = [], records = [];
-  const key = { id: 1, user_id: 2, role_id: 7, role_status: 'ACTIVE', model_policy_id: 8, status: 'ACTIVE', user_status: 'ACTIVE', ...options.key };
+  const key = { id: 1, user_id: 2, role_id: 7, role_status: 'ACTIVE', role_debug_enabled: true, model_policy_id: 8, status: 'ACTIVE', user_status: 'ACTIVE', ...options.key };
   const assignment = { upstream_api_key_id: 3, provider_id: 4, key_status: 'ACTIVE', provider_status: 'ACTIVE', api_type: options.type || 'ANTHROPIC', aws_region: options.region, anthropic_api_url: options.anthropicUrl, api_url: 'https://mock.example/v1', encrypted_api_key: encrypt('upstream-test-secret', encryptionKey) };
   const db = { async query(sql, params) {
     queries.push({ sql, params });

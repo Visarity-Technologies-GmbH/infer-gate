@@ -4,7 +4,7 @@ export async function authenticate(db, authorization) {
   const match = /^Bearer (pak_[A-Za-z0-9_-]+)$/i.exec(authorization || '');
   if (!match) fail(401, 'invalid_api_key', 'Invalid proxy API key');
   const [key] = await db.query(`SELECT k.id, k.name AS proxy_api_key_name, k.user_id, u.name AS user_name, u.email AS user_email,
-    k.status, k.expires_at <= UTC_TIMESTAMP(3) AS expired, k.role_id, r.name AS role_name, r.status AS role_status, r.classification_handler_id, r.evaluation_script, r.prompt_script, r.input_script, r.output_script, r.system_prompt_compaction,
+    k.status, k.expires_at <= UTC_TIMESTAMP(3) AS expired, k.role_id, r.name AS role_name, r.status AS role_status, r.debug_enabled AS role_debug_enabled, r.classification_handler_id, r.evaluation_script, r.prompt_script, r.input_script, r.output_script, r.system_prompt_compaction,
     r.updated_at AS role_updated_at, h.maxToken AS classification_max_token,
     SHA2(CAST(JSON_ARRAY(h.api_url,h.json_template,h.key_fingerprint,h.maxToken) AS CHAR),256) AS classification_config_hash,
     u.status AS user_status FROM proxy_api_keys k JOIN users u ON u.id=k.user_id LEFT JOIN roles r ON r.id=k.role_id

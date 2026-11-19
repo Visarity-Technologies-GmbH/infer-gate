@@ -85,7 +85,7 @@ test('classification request write errors do not throw or expose request bodies'
 
 async function fixture(t, options = {}) {
   const path = await directory(t), encryptionKey = randomBytes(32);
-  let enabled = false, suspended = false;
+  let enabled = false, suspended = false, roleEnabled = options.roleEnabled ?? true;
   const logs = [];
   const db = {
     async query(sql, params = []) {
@@ -94,7 +94,7 @@ async function fixture(t, options = {}) {
       if (sql.startsWith('UPDATE debug_logging_settings')) { enabled = params[0]; return { affectedRows: 1 }; }
       if (sql.includes('FROM user_usage_limits')) return [];
       if (sql.startsWith('INSERT INTO api_requests')) return { insertId: 1 };
-      if (sql.includes('FROM proxy_api_keys k')) return [{ id: 1, proxy_api_key_name: 'Test proxy key', user_id: 2, user_name: 'Test user', user_email: 'user@example.test', role_id: 7, role_name: 'Test role', role_status: 'ACTIVE', model_policy_id: 8, status: 'ACTIVE', user_status: suspended ? 'SUSPENDED' : 'ACTIVE', classification_handler_id: options.classification ? 9 : null, evaluation_script: options.script }];
+      if (sql.includes('FROM proxy_api_keys k')) return [{ id: 1, proxy_api_key_name: 'Test proxy key', user_id: 2, user_name: 'Test user', user_email: 'user@example.test', role_id: 7, role_name: 'Test role', role_status: 'ACTIVE', role_debug_enabled: roleEnabled, model_policy_id: 8, status: 'ACTIVE', user_status: suspended ? 'SUSPENDED' : 'ACTIVE', classification_handler_id: options.classification ? 9 : null, evaluation_script: options.script }];
       if (sql.includes('FROM classification_handlers')) return [{ api_url: 'https://classifier.example', encrypted_api_key: encrypt('classifier-secret', encryptionKey), json_template: '{"prompt":"${PROMPT}"}' }];
       if (sql.includes('FROM role_model_policies')) return options.policies || [{ model_pattern: '*', policy: 'ALLOW' }];
       if (sql.includes('FROM role_upstream_assignments')) return [{ upstream_api_key_id: 3, upstream_name: 'Test upstream key', provider_id: 4, api_type: options.type, key_status: 'ACTIVE', provider_status: 'ACTIVE', api_url: 'https://mock.example/v1', encrypted_api_key: encrypt('upstream-secret', encryptionKey) }];
@@ -124,7 +124,7 @@ async function fixture(t, options = {}) {
   const base = `http://127.0.0.1:${server.address().port}`;
   const settings = (method = 'GET', body, auth = true) => fetch(`${base}/admin/settings/debug-logging`, { method, headers: { 'content-type': 'application/json', ...(auth ? { authorization: 'Bearer adm_test' } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
   const request = (stream = false, endpoint = '/v1/chat/completions', extra = {}) => fetch(`${base}${endpoint}`, { method: 'POST', headers: { authorization: 'Bearer pak_test', 'content-type': 'application/json' }, body: JSON.stringify({ ...input, stream, ...extra }) });
-  return { path, settings, request, output, sse, logs, suspend: (value = true) => { suspended = value; } };
+  return { path, settings, request, output, sse, logs, setRoleEnabled: value => { roleEnabled = value; }, suspend: (value = true) => { suspended = value; } };
 }
 
 test('logging settings require admin authentication and strict booleans', async t => {
@@ -311,4 +311,14 @@ test('Messages diagnostic output captures the returned sanitized provider error'
   assert.deepEqual(result.metadata.output, error); assert.equal(result.metadata.request_status, 'FAILED');
   assertIdentity(result.metadata);
   assert.equal(result.metadata.error_code, 'upstream_400'); assert(!JSON.stringify(result).includes('private provider diagnostics'));
+});
+
+test('global and role switches must both be enabled and role changes affect subsequent calls', async t => {
+  const f = await fixture(t, { roleEnabled: false });
+  for (const [global, role, count] of [[false, false, 0], [true, false, 0], [false, true, 0], [true, true, 1], [true, false, 1]]) {
+    await f.settings('PUT', { enabled: global });
+    f.setRoleEnabled(role);
+    assert.equal(await (await f.request()).text(), f.output);
+    assert.equal((await readdir(f.path)).length, count);
+  }
 });

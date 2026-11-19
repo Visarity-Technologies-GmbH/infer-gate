@@ -1,0 +1,62 @@
+{
+  "request_id": "37b2d8a1-7b6c-4790-ad0c-3e3211e68df7",
+  "started_at": "2026-11-17T14:14:03.582Z",
+  "endpoint": "/v1/chat/completions",
+  "http_method": "POST",
+  "user_id": "1",
+  "user_name": "User",
+  "user_email": "user@example.com",
+  "role_id": "1",
+  "role_name": "All",
+  "upstream_id": "4",
+  "upstream_name": "Spark vLLM",
+  "proxy_api_key_id": "1",
+  "proxy_api_key_name": "User All",
+  "completed_at": "2026-11-17T14:14:05.155Z",
+  "model": "qwen3.8-flash-next",
+  "classification_cache_hit": false,
+  "stream": true,
+  "http_status": 200,
+  "request_status": "SUCCESS",
+  "output_complete": true,
+  "output_truncated": false,
+  "output": {
+    "object": "chat.completion",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "\n\n- Germany: Berlin  \n- Italy: Rome  \n- France: Paris  \n- Spain: Madrid  \n- Denmark: Copenhagen",
+          "reasoning": "We need answer user's question: \"What are the capitals of the following countries: Germany, Italy, France, Spain and Denmark.\" Need provide concise answer. Then final.\n"
+        },
+        "finish_reason": "stop"
+      }
+    ],
+    "id": "chatcmpl-a0669d6a04944fd5",
+    "created": 1794924843,
+    "model": "qwen3.8-flash-next",
+    "system_fingerprint": "vllm-0.32.0-cdcfc334",
+    "usage": {
+      "prompt_tokens": 142,
+      "total_tokens": 205,
+      "completion_tokens": 63,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "created_cache_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 36
+      }
+    }
+  },
+  "usage": {
+    "model": "qwen3.8-flash-next",
+    "input_tokens": 142,
+    "cached_input_tokens": 0,
+    "cache_write_input_tokens": null,
+    "output_tokens": 63,
+    "reasoning_tokens": 36,
+    "total_tokens": 205
+  }
+}

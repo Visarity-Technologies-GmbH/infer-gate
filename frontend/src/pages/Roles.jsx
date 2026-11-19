@@ -129,6 +129,7 @@ function RoleEditor({ api, record, policies, handlers, defaultScript, onClose, o
       input_script: record.input_script ?? "",
       output_script: record.output_script ?? "",
       status: record.status,
+      debug_enabled: record.debug_enabled ?? false,
     }),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -200,20 +201,20 @@ function RoleEditor({ api, record, policies, handlers, defaultScript, onClose, o
             </select>
           </Field>
           {!handlers.length && <p className="muted">Create a handler on the Classification handlers page to assign one here.</p>}
-          <Field label="Prompt script (JavaScript, optional)">
-            <textarea
-              className="code-editor"
-              rows={10}
-              maxLength={32768}
-              spellCheck={false}
-              autoCapitalize="off"
-              autoCorrect="off"
-              value={data.prompt_script}
-              onChange={(e) => setData({ ...data, prompt_script: e.target.value })}
-            />
-          </Field>
           {data.classification_handler_id != null && (
             <>
+              <Field label="Prompt script (JavaScript, optional)">
+                <textarea
+                  className="code-editor"
+                  rows={10}
+                  maxLength={32768}
+                  spellCheck={false}
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  value={data.prompt_script}
+                  onChange={(e) => setData({ ...data, prompt_script: e.target.value })}
+                />
+              </Field>
               <Field label="Evaluation script (JavaScript)">
                 <textarea
                   className="code-editor"
@@ -266,6 +267,13 @@ function RoleEditor({ api, record, policies, handlers, defaultScript, onClose, o
               </label>
             ))}
           </fieldset>
+          <Field label="Debug logging">
+            <select value={String(data.debug_enabled)} onChange={e => setData({ ...data, debug_enabled: e.target.value === "true" })}>
+              <option value="false">Disabled</option>
+              <option value="true">Enabled</option>
+            </select>
+          </Field>
+          <p className="muted">Captures requests for this role only when global debug logging is also enabled. Changes apply to new calls.</p>
           <Field label="Status">
             <select
               value={data.status}

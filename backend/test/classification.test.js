@@ -32,7 +32,7 @@ async function fixture(t, { enabled = true, assigned = true, deny = false, timeo
     async query(sql) {
       if (sql.includes('FROM user_usage_limits')) return [];
       if (sql.startsWith('INSERT INTO api_requests')) return { insertId: 1 };
-      if (sql.includes('FROM proxy_api_keys k')) return [{ id: 1, user_id: 2, role_id: roleId, role_status: 'ACTIVE', model_policy_id: 8, classification_handler_id: assigned ? 9 : null, classification_config_hash: classificationConfigHash, classification_max_token: maxToken, evaluation_script: script, prompt_script: promptScript, input_script: inputScript, output_script: outputScript, status: 'ACTIVE', user_status: suspended ? 'SUSPENDED' : 'ACTIVE' }];
+      if (sql.includes('FROM proxy_api_keys k')) return [{ id: 1, user_id: 2, role_id: roleId, role_status: 'ACTIVE', role_debug_enabled: true, model_policy_id: 8, classification_handler_id: assigned ? 9 : null, classification_config_hash: classificationConfigHash, classification_max_token: maxToken, evaluation_script: script, prompt_script: promptScript, input_script: inputScript, output_script: outputScript, status: 'ACTIVE', user_status: suspended ? 'SUSPENDED' : 'ACTIVE' }];
       if (sql.includes('FROM classification_handlers')) return [{ api_url: 'https://classifier.example/classify', encrypted_api_key: encrypt('classifier-test-secret', encryptionKey), json_template: '{"prompt":"${PROMPT}","option":true}', maxToken }];
       if (sql.includes('FROM role_upstream_model_aliases')) return [];
       if (sql.includes('FROM role_model_policies')) { events.push('policy'); return policies ?? [{ model_pattern: '*', policy: deny ? 'DENY' : 'ALLOW' }]; }

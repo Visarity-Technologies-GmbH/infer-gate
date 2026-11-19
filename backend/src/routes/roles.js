@@ -25,7 +25,7 @@ export function roleData(body) {
     typeof body !== "object" ||
     Array.isArray(body) ||
     Object.keys(body).some(
-      (k) => !["name", "description", "model_policy_ids", "status", "classification_handler_id", "evaluation_script", "system_prompt_compaction", ...optionalScriptFields].includes(k),
+      (k) => !["name", "description", "model_policy_ids", "status", "classification_handler_id", "evaluation_script", "system_prompt_compaction", "debug_enabled", ...optionalScriptFields].includes(k),
     ) ||
     typeof body.name !== "string" ||
     !body.name.trim() ||
@@ -40,6 +40,8 @@ export function roleData(body) {
       "invalid_input",
       "Supply a role name, model policy and valid status",
     );
+  if (Object.hasOwn(body, "debug_enabled") && typeof body.debug_enabled !== "boolean")
+    fail(400, "invalid_input", "debug_enabled must be a boolean");
   const handlerId = body.classification_handler_id;
   if (handlerId != null && !["string", "number"].includes(typeof handlerId))
     fail(400, "invalid_id", "Invalid classification handler identifier");
@@ -149,8 +151,8 @@ export function rolesRouter(db, config = {}, { fetchImpl = fetch, discoveryCoold
     const data = roleData(req.body);
     if (data[4] !== null && data[5] === null) data[5] = DEFAULT_EVALUATION_SCRIPT;
     const result = await db.query(
-      "INSERT INTO roles(name,description,status,classification_handler_id,evaluation_script,prompt_script,input_script,output_script,system_prompt_compaction) VALUES (?,?,?,?,?,?,?,?,?)",
-      [data[0], data[1], ...data.slice(3)],
+      "INSERT INTO roles(name,description,status,classification_handler_id,evaluation_script,prompt_script,input_script,output_script,system_prompt_compaction,debug_enabled) VALUES (?,?,?,?,?,?,?,?,?,?)",
+      [data[0], data[1], ...data.slice(3), req.body.debug_enabled ?? false],
     );
     for (const id of data[2]) await db.query("INSERT INTO role_model_policies(role_id,model_policy_id) VALUES (?,?)", [result.insertId, id]);
     res.status(201).json({ id: result.insertId });
@@ -158,13 +160,14 @@ export function rolesRouter(db, config = {}, { fetchImpl = fetch, discoveryCoold
   router.put("/roles/:id", async (req, res) => {
     const data = roleData(req.body);
     // Older clients omit this optional field; preserve their existing assignment.
+    const hasDebug = Object.hasOwn(req.body, "debug_enabled");
     const hasHandler = Object.hasOwn(req.body, "classification_handler_id");
     const hasScript = Object.hasOwn(req.body, "evaluation_script");
     const suppliedScripts = optionalScriptFields.filter(field => Object.hasOwn(req.body, field));
     const result = await db.transaction(async tx => {
       const result = await tx.query(
-      `UPDATE roles SET name=?,description=?,status=?${hasHandler ? ",classification_handler_id=?" : ""}${hasScript ? ",evaluation_script=?" : ""}${suppliedScripts.map(field => `,${field}=?`).join("")}${data.at(-1) !== null ? ",system_prompt_compaction=?" : ""},updated_at=UTC_TIMESTAMP(3) WHERE id=?`,
-      [data[0], data[1], data[3], ...(hasHandler ? [data[4]] : []), ...(hasScript ? [data[5]] : []), ...suppliedScripts.map(field => data[6 + optionalScriptFields.indexOf(field)]), ...(data.at(-1) !== null ? [data.at(-1)] : []), policyId(req.params.id)],
+      `UPDATE roles SET name=?,description=?,status=?${hasDebug ? ",debug_enabled=?" : ""}${hasHandler ? ",classification_handler_id=?" : ""}${hasScript ? ",evaluation_script=?" : ""}${suppliedScripts.map(field => `,${field}=?`).join("")}${data.at(-1) !== null ? ",system_prompt_compaction=?" : ""},updated_at=UTC_TIMESTAMP(3) WHERE id=?`,
+      [data[0], data[1], data[3], ...(hasDebug ? [req.body.debug_enabled] : []), ...(hasHandler ? [data[4]] : []), ...(hasScript ? [data[5]] : []), ...suppliedScripts.map(field => data[6 + optionalScriptFields.indexOf(field)]), ...(data.at(-1) !== null ? [data.at(-1)] : []), policyId(req.params.id)],
       );
       if (result.affectedRows) {
         await tx.query("DELETE FROM role_model_policies WHERE role_id=?", [policyId(req.params.id)]);

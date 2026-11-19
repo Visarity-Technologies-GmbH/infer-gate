@@ -1,13 +1,17 @@
+.vscode
 node_modules/
 .env
 .env.*
 !.env.example
-coverage/
 *.log
 backend/logs/
 backend/data/
+backend/data_backup/
 backend/backend_igs.tar.gz
 docs/
 notes.txt
 jev_input.json
+base.sql
+frontend/dist
+scripts/test_data_out
 

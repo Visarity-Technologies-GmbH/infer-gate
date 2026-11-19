@@ -1,0 +1,39 @@
+{
+  "state": { "prompt": "${PROMPT}" },
+  "model": "jev-latest",
+  "questions": {
+    "prompt_category": {
+      "type": "choice",
+      "instructions": "In which category is the prompt ?",
+      "criteria": {
+        "translation": "translating text from one human language to another: “Translate this from German to English.”",
+        "math": "arithmetic, algebra, calculus, geometry, probability, statistics, mathematical proofs, etc.",
+        "trivia": "factual/general-knowledge questions: ”Who won the 1954 World Cup?”",
+        "programming": "writing/debugging/explaining code, APIs, algorithms.",
+        "technicalSupport": "Linux, SSH, networking, configuration, error messages, hardware, etc.",
+        "research": "questions requiring gathering/combining information rather than retrieving one known fact.",
+        "currentInformation": "inherently time-sensitive questions such as “What’s the latest Ubuntu version?”",
+        "reasoning": "logic, deduction, planning, analysis, puzzles, and problems requiring multi-step reasoning.",
+        "writing": "emails, reports, rewriting, grammar/style.",
+        "summarization": "summarizing supplied content.",
+        "dataAnalysis": "interpreting tables, CSVs, statistics, logs, etc.",
+        "recommendation": "Which X should I choose?",
+        "creative": "stories, brainstorming, names, poems, etc.",
+        "other": "important as a fallback instead of forcing a bad classification."
+      }
+    },
+    "prompt_complexity": {
+      "type": "score",
+      "instructions": "How complex is it to answer the prompt ?",
+      "criteria": [
+        "Easy: Even a small local open weight model can answer it correctly.",        
+        "Medium: A sophisticated model (>=300B) can handle the prompt.",
+        "Hard: Only the latest and best frontier foundation model from anthropic or open ai can handle it."
+      ]
+    },
+    "sensitiveData": {
+      "type": "noul",
+      "instructions": "Estimates the probability that the prompt itself contains sensitive, confidential, private, secret, or security-relevant information."
+    }
+  }
+}

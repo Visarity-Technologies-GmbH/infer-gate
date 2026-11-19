@@ -3,7 +3,7 @@ import { updateResponseOutput } from './output-script.js';
 
 // Buffer only one SSE event; retain event/id/retry/comment fields and the
 // protocol's non-JSON completion marker. Normalize SSE line endings to LF.
-export async function* transformOutputStream(body, script, outputType, context, { signal, helpers, onOriginal = async () => {}, onUpdated = async () => {} } = {}) {
+export async function* transformOutputStream(body, script, outputType, context, { signal, helpers, scriptTimeouts, onOriginal = async () => {}, onUpdated = async () => {} } = {}) {
   if (!body) fail(502, 'incomplete_stream', 'Provider returned no stream');
   const decoder = new TextDecoder();
   let buffer = '', pendingCR = false;
@@ -24,7 +24,7 @@ export async function* transformOutputStream(body, script, outputType, context, 
     if (!output || typeof output !== 'object' || Array.isArray(output))
       fail(502, 'invalid_output_script_input', 'Output script requires JSON stream objects');
     await onOriginal(output);
-    const updated = await updateResponseOutput(script, output, outputType, context, { signal, helpers });
+    const updated = await updateResponseOutput(script, output, outputType, context, { signal, helpers, scriptTimeouts });
     await onUpdated(JSON.parse(updated.toString('utf8')));
     let inserted = false;
     const result = [];

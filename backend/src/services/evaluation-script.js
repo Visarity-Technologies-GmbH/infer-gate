@@ -35,5 +35,5 @@ export function validateEvaluationScript(value) {
 }
 
 export function roleWithEvaluationScript(role) {
-  return { ...role, evaluation_script: role.evaluation_script ?? (role.classification_handler_id != null ? DEFAULT_EVALUATION_SCRIPT : null) };
+  return { ...role, debug_enabled: role.debug_enabled === true || role.debug_enabled === 1, evaluation_script: role.evaluation_script ?? (role.classification_handler_id != null ? DEFAULT_EVALUATION_SCRIPT : null) };
 }

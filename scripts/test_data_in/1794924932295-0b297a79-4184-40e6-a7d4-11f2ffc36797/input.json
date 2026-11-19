@@ -1,0 +1,40 @@
+{
+  "model": "qwen3.8-flash-next",
+  "stream": true,
+  "messages": [
+    {
+      "role": "system",
+      "content": "Given the following conversation, relevant context, and a follow up question, reply with an answer to the current question the user is asking. The current date and time is Tuesday, November 17, 2026 3:15 PM. Return only your response to the question given the above information following the users instructions as needed."
+    },
+    {
+      "role": "user",
+      "content": "What are the capitals of the following countries: Germany, Italy, France, Spain and Denmark."
+    },
+    {
+      "role": "assistant",
+      "content": "<think>We need answer user's question: \"What are the capitals of the following countries: Germany, Italy, France, Spain and Denmark.\" Need provide concise answer. Then final.\n</think>\n\n- Germany: Berlin  \n- Italy: Rome  \n- France: Paris  \n- Spain: Madrid  \n- Denmark: Copenhagen"
+    },
+    {
+      "role": "user",
+      "content": "I forgot about Sweden and Finland."
+    },
+    {
+      "role": "assistant",
+      "content": "<think>We need answer user: \"I forgot about Sweden and Finland.\" Likely wants capitals of Sweden and Finland added. Need final concise.\n</think>\n\n- Sweden: Stockholm  \n- Finland: Helsinki"
+    },
+    {
+      "role": "user",
+      "content": "Create a json list of all the asked countries."
+    },
+    {
+      "role": "assistant",
+      "content": "<think>We need respond to user: \"Create a json list of all the asked countries.\" We need include all asked countries: Germany, Italy, France, Spain, Denmark, Sweden, Finland. Likely JSON list. Need maybe format as JSON array of objects? \"json list\" ambiguous. Could be list of countries. Since asked capitals earlier, maybe create JSON list of all asked countries with capitals. But phrase \"all the asked countries\" likely country names. Need return only response following instructions. Use JSON. Could be:\n[\n  \"Germany\",\n  \"Italy\",\n  \"France\",\n  \"Spain\",\n  \"Denmark\",\n  \"Sweden\",\n  \"Finland\"\n]\nBut maybe include capitals because context? \"Create a json list of all the asked countries.\" Not capitals. Need only countries. Ensure valid JSON. Final with code block? User says create json list. Could output raw JSON. Need no extra.\n</think>\n\n[\n  \"Germany\",\n  \"Italy\",\n  \"France\",\n  \"Spain\",\n  \"Denmark\",\n  \"Sweden\",\n  \"Finland\"\n]"
+    },
+    {
+      "role": "user",
+      "content": "Add capital,  number of people and official languages"
+    }
+  ],
+  "temperature": 0.7,
+  "max_tokens": 16000
+}

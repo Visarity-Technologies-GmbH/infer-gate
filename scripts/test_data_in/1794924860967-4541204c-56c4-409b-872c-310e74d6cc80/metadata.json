@@ -1,0 +1,62 @@
+{
+  "request_id": "4541204c-56c4-409b-872c-310e74d6cc80",
+  "started_at": "2026-11-17T14:14:20.963Z",
+  "endpoint": "/v1/chat/completions",
+  "http_method": "POST",
+  "user_id": "1",
+  "user_name": "User",
+  "user_email": "user@example.com",
+  "role_id": "1",
+  "role_name": "All",
+  "upstream_id": "4",
+  "upstream_name": "Spark vLLM",
+  "proxy_api_key_id": "1",
+  "proxy_api_key_name": "User All",
+  "completed_at": "2026-11-17T14:14:22.256Z",
+  "model": "qwen3.8-flash-next",
+  "classification_cache_hit": false,
+  "stream": true,
+  "http_status": 200,
+  "request_status": "SUCCESS",
+  "output_complete": true,
+  "output_truncated": false,
+  "output": {
+    "object": "chat.completion",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "\n\n- Sweden: Stockholm  \n- Finland: Helsinki",
+          "reasoning": "We need answer user: \"I forgot about Sweden and Finland.\" Likely wants capitals of Sweden and Finland added. Need final concise.\n"
+        },
+        "finish_reason": "stop"
+      }
+    ],
+    "id": "chatcmpl-be44ad9a25034539",
+    "created": 1794924860,
+    "model": "qwen3.8-flash-next",
+    "system_fingerprint": "vllm-0.32.0-cdcfc334",
+    "usage": {
+      "prompt_tokens": 226,
+      "total_tokens": 265,
+      "completion_tokens": 39,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "created_cache_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 27
+      }
+    }
+  },
+  "usage": {
+    "model": "qwen3.8-flash-next",
+    "input_tokens": 226,
+    "cached_input_tokens": 0,
+    "cache_write_input_tokens": null,
+    "output_tokens": 39,
+    "reasoning_tokens": 27,
+    "total_tokens": 265
+  }
+}

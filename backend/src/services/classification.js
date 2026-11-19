@@ -3,10 +3,10 @@ import { decrypt } from '../security/credentials.js';
 import { fail, HttpError } from '../errors.js';
 
 const responseLimit = 1024 * 1024;
-export function classificationPromptReplacement(messages, maxToken = null, { script, input, inputType = 'OPENAI', context = {}, signal, helpers } = {}) {
+export function classificationPromptReplacement(messages, maxToken = null, { script, input, inputType = 'OPENAI', context = {}, signal, helpers, scriptTimeouts } = {}) {
   if (script != null) {
     return runRoleScript({ mode: 'prompt', script, input, inputType,
-      limit: Math.floor((maxToken ?? 30000) * 0.9), context }, { signal, kind: 'prompt', helpers }).then(result => {
+      limit: Math.floor((maxToken ?? 30000) * 0.9), context }, { signal, kind: 'prompt', helpers, scriptTimeouts }).then(result => {
       if (typeof result?.value !== 'string' || !result.context || typeof result.context !== 'object' || Array.isArray(result.context))
         fail(502, 'invalid_prompt_result', 'Prompt script must return a string and retain an object context');
       updateScriptContext(context, result.context, 'prompt');

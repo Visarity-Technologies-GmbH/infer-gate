@@ -1,0 +1,62 @@
+{
+  "request_id": "2d94aec0-084c-4c5d-adb7-f764e79d4d8e",
+  "started_at": "2026-11-17T14:17:14.280Z",
+  "endpoint": "/v1/chat/completions",
+  "http_method": "POST",
+  "user_id": "1",
+  "user_name": "User",
+  "user_email": "user@example.com",
+  "role_id": "1",
+  "role_name": "All",
+  "upstream_id": "4",
+  "upstream_name": "Spark vLLM",
+  "proxy_api_key_id": "1",
+  "proxy_api_key_name": "User All",
+  "completed_at": "2026-11-17T14:17:39.578Z",
+  "model": "qwen3.8-flash-next",
+  "classification_cache_hit": false,
+  "stream": true,
+  "http_status": 200,
+  "request_status": "SUCCESS",
+  "output_complete": true,
+  "output_truncated": false,
+  "output": {
+    "object": "chat.completion",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "\n\n[\n  {\n    \"Land\": \"Deutschland\",\n    \"Hauptstadt\": \"Berlin\",\n    \"Einwohnerzahl\": 84400000,\n    \"Amtssprachen\": [\n      \"Deutsch\"\n    ]\n  },\n  {\n    \"Land\": \"Italien\",\n    \"Hauptstadt\": \"Rom\",\n    \"Einwohnerzahl\": 58900000,\n    \"Amtssprachen\": [\n      \"Italienisch\"\n    ]\n  },\n  {\n    \"Land\": \"Frankreich\",\n    \"Hauptstadt\": \"Paris\",\n    \"Einwohnerzahl\": 68600000,\n    \"Amtssprachen\": [\n      \"Französisch\"\n    ]\n  },\n  {\n    \"Land\": \"Spanien\",\n    \"Hauptstadt\": \"Madrid\",\n    \"Einwohnerzahl\": 48600000,\n    \"Amtssprachen\": [\n      \"Spanisch\",\n      \"Katalanisch\",\n      \"Baskisch\",\n      \"Galicisch\",\n      \"Aranesisch\"\n    ]\n  },\n  {\n    \"Land\": \"Dänemark\",\n    \"Hauptstadt\": \"Kopenhagen\",\n    \"Einwohnerzahl\": 5970000,\n    \"Amtssprachen\": [\n      \"Dänisch\",\n      \"Färöisch\",\n      \"Grönländisch\"\n    ]\n  },\n  {\n    \"Land\": \"Schweden\",\n    \"Hauptstadt\": \"Stockholm\",\n    \"Einwohnerzahl\": 10600000,\n    \"Amtssprachen\": [\n      \"Schwedisch\"\n    ]\n  },\n  {\n    \"Land\": \"Finnland\",\n    \"Hauptstadt\": \"Helsinki\",\n    \"Einwohnerzahl\": 5640000,\n    \"Amtssprachen\": [\n      \"Finnisch\",\n      \"Schwedisch\"\n    ]\n  }\n]",
+          "reasoning": "We need answer user: \"Translate the list to german.\" Context: previous JSON list of countries with capital, population, official_languages. Need translate list to German. They likely want JSON keys/values? \"Translate the list to german\" could mean produce German version of the JSON list. Need decide. We should return only response, following users instructions. Need likely output JSON with German keys and values where appropriate. Country names in German? Capitals in German? official languages in German? Populations numbers unchanged. Need maybe keys: \"Land\", \"Hauptstadt\", \"Bevölkerung\", \"Amtssprachen\". Values: Deutschland, Berlin; Italien, Rom; Frankreich, Paris; Spanien, Madrid; Dänemark, Kopenhagen; Schweden, Stockholm; Finnland, Helsinki. Official languages: Deutsch, Italienisch, Französisch, Spanisch/Kastilisch, Katalanisch, Baskisch, Galicisch, Aranesisch? Danish: Dänisch, Färöisch, Grönländisch. Swedish: Schwedisch. Finnish: Finnisch, Schwedisch. Need ensure German. JSON valid. Could include \"population\" key? Translate to German: \"Bevölkerung\". \"number of people\" maybe \"Einwohnerzahl\". Previous field population; in German could use \"Bevölkerung\" or \"Einwohnerzahl\". Use \"Einwohnerzahl\" maybe more natural. Need \"official_languages\": \"Amtssprachen\". Country: \"Land\". Capital: \"Hauptstadt\". Need maybe maintain array of objects. Need ensure official languages for Spain: In Spanish official languages: Spanisch (Kastilisch), Katalanisch (Valencianisch), Baskisch, Galicisch, Aranesisch. Since German translation of list, use \"Spanisch\" or \"Kastilisch\"? Maybe \"Spanisch (Kastilisch)\". But JSON strings can include parentheses. For Denmark: \"Dänisch\", \"Färöisch\", \"Grönländisch\". For Finland: \"Finnisch\", \"Schwedisch\". For Germany: \"Deutsch\". Italy: \"Italienisch\". France: \"Französisch\". Sweden: \"Schwedisch\". Need maybe \"Amtssprachen\" plural. If only one, array. Need maybe not include notes. Final only JSON. Ensure umlauts. Need no markdown? They said translate list; return JSON. Use code block? Previous answer raw JSON. Maybe raw JSON. Need valid JSON. Let's craft.\n"
+        },
+        "finish_reason": "stop"
+      }
+    ],
+    "id": "chatcmpl-a4c7cf3e53ef8ecc",
+    "created": 1794925034,
+    "model": "qwen3.8-flash-next",
+    "system_fingerprint": "vllm-0.32.0-cdcfc334",
+    "usage": {
+      "prompt_tokens": 3722,
+      "total_tokens": 4761,
+      "completion_tokens": 1039,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "created_cache_tokens": 1600
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 535
+      }
+    }
+  },
+  "usage": {
+    "model": "qwen3.8-flash-next",
+    "input_tokens": 3722,
+    "cached_input_tokens": 0,
+    "cache_write_input_tokens": null,
+    "output_tokens": 1039,
+    "reasoning_tokens": 535,
+    "total_tokens": 4761
+  }
+}

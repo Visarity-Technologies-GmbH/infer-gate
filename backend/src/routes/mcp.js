@@ -9,6 +9,7 @@ const serverInfo = { name: 'InferGate', version: '0.1.0' };
 export const identifier = { type: ['string', 'integer'], pattern: '^[1-9][0-9]{0,18}$', minimum: 1 };
 const nullableText = { type: ['string', 'null'] };
 const fields = {
+  debug_enabled: { type: 'boolean', description: 'Enable debug capture for this role only when global debug logging is also enabled. Defaults to false.' },
   system_prompt_compaction: { type: 'object', additionalProperties: false, properties: Object.fromEntries(compactionOptions.map(key => [key, { type: 'boolean' }])) },
   aws_region: { type: 'string', description: 'Required for AWS Bedrock keys. Omit for OpenAI and all other providers.' },
   enabled: { type: 'boolean' }, period: { enum: ['DAILY', 'WEEKLY'] }, basis: { enum: ['TOKENS', 'COST'] },
@@ -65,7 +66,7 @@ register('disable_upstream_key', 'PATCH', '/upstream-keys/:id', [], [], { status
 register('create_provider', 'POST', '/providers', ['name','api_url'], ['api_type','anthropic_api_url']);
 register('edit_provider', 'PATCH', '/providers/:id', [], ['name','api_url','api_type','anthropic_api_url']);
 register('disable_provider', 'PATCH', '/providers/:id', [], [], { status: 'DISABLED' });
-const roleOptions = ['description','status','classification_handler_id','prompt_script','evaluation_script','input_script','output_script','system_prompt_compaction'];
+const roleOptions = ['debug_enabled','description','status','classification_handler_id','prompt_script','evaluation_script','input_script','output_script','system_prompt_compaction'];
 register('list_role_models', 'GET', '/roles/:id/models', [], [], {}, 'List the distinct model IDs available to this active role across its upstreams after applying its model policy. Supply a role ID from list_roles.');
 register('list_role_upstreams', 'GET', '/roles/:id/assignments', [], [], {}, 'List upstream key IDs assigned to this role, with priority and assignment status in routing order.');
 register('set_role_upstreams', 'PUT', '/roles/:id/assignments', ['assignments'], [], {}, 'Replace all upstream assignments for this role. Include every key to retain. An empty array clears all assignments.');

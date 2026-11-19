@@ -1,0 +1,24 @@
+{
+  "model": "qwen3.8-flash-next",
+  "stream": true,
+  "messages": [
+    {
+      "role": "system",
+      "content": "Given the following conversation, relevant context, and a follow up question, reply with an answer to the current question the user is asking. The current date and time is Tuesday, November 17, 2026 3:14 PM. Return only your response to the question given the above information following the users instructions as needed."
+    },
+    {
+      "role": "user",
+      "content": "What are the capitals of the following countries: Germany, Italy, France, Spain and Denmark."
+    },
+    {
+      "role": "assistant",
+      "content": "<think>We need answer user's question: \"What are the capitals of the following countries: Germany, Italy, France, Spain and Denmark.\" Need provide concise answer. Then final.\n</think>\n\n- Germany: Berlin  \n- Italy: Rome  \n- France: Paris  \n- Spain: Madrid  \n- Denmark: Copenhagen"
+    },
+    {
+      "role": "user",
+      "content": "I forgot about Sweden and Finland."
+    }
+  ],
+  "temperature": 0.7,
+  "max_tokens": 16000
+}

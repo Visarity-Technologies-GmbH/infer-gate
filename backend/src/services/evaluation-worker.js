@@ -17,7 +17,12 @@ try {
     const call = pending.get(message?.reply);
     if (call) {
       pending.delete(message.reply);
-      if (message.error) call.reject(new Error('Script helper failed'));
+      if (message.error) {
+        const error = new Error(message.error.message ?? 'Script helper failed');
+        if (message.error.status !== undefined) error.status = message.error.status;
+        if (message.error.response !== undefined) error.response = message.error.response;
+        call.reject(error);
+      }
       else call.resolve(message.value);
     }
   });
@@ -26,6 +31,7 @@ try {
     __logDebug: (file, text) => rpc('logDebug', file, text),
     __readStringCache: key => rpc('readStringCache', key),
     __writeStringCache: (key, value) => rpc('writeStringCache', key, value),
+    __fetchJson: (object, apiUrl, bearerToken) => rpc('fetchJson', object, apiUrl, bearerToken),
     __md5: value => createHash('md5').update(String(value)).digest('hex'),
   });
   context = createContext(sandbox, { codeGeneration: { strings: false, wasm: false }, microtaskMode: 'afterEvaluate' });
@@ -45,7 +51,8 @@ ${payload.script}
     const args = JSON.parse(${JSON.stringify(JSON.stringify(args))});
     args[${contextIndex}] = Object.assign(args[${contextIndex}], {
       logDebug: (file, text) => __logDebug(file, text), readStringCache: key => __readStringCache(key),
-      writeStringCache: (key, value) => __writeStringCache(key, value), md5: value => __md5(value)
+      writeStringCache: (key, value) => __writeStringCache(key, value), md5: value => __md5(value),
+      fetchJson: (object, apiUrl, bearerToken) => __fetchJson(object, apiUrl, bearerToken)
     });
     const value = ${payload.mode === 'prompt' ? 'prompt' : payload.mode === 'input' ? 'updateInput' : payload.mode === 'output' ? 'updateOutput' : 'evaluate'}(...args);
     const pack = value => stringify({ result: { value, context: args[${contextIndex}] } });

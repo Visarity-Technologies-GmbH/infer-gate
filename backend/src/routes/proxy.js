@@ -87,7 +87,7 @@ export function proxyHandler(db, config, { fetchImpl = fetch, debugLogDirectory,
       const classificationInputType = responses ? 'OPENAI_RESPONSES' : anthropic ? 'ANTHROPIC' : 'OPENAI';
       const chatCompletion = req.method === 'POST' && /^\/chat\/completions\/?$/.test(req.url.split('?')[0]);
       const supportsScripts = responses || chatCompletion || (anthropic && !counting);
-      if (supportsScripts) {
+      if (supportsScripts && (key.role_debug_enabled === true || key.role_debug_enabled === 1)) {
         try { if (await debugLoggingEnabled(db)) debugLog = await beginDebugLog(record, body); }
         catch { log({ event: 'debug_log_setting_read_failed', request_id: record.request_id }); }
       }
@@ -134,7 +134,7 @@ export function proxyHandler(db, config, { fetchImpl = fetch, debugLogDirectory,
         if (!Array.isArray(meta.messages)) fail(400, 'invalid_messages', 'Messages must be an array');
         const promptReplacement = await classificationPromptReplacement(meta.messages, key.classification_max_token, {
           script: key.prompt_script, input: classificationInput, inputType: classificationInputType,
-          context, signal: controller.signal, helpers: scriptHelpers,
+          context, signal: controller.signal, helpers: scriptHelpers, scriptTimeouts: config.scriptTimeouts,
         });
         const cacheKey = classificationCache ? classificationCacheKey(key, meta.messages, responses ? 'OPENAI_RESPONSES' : anthropic ? 'ANTHROPIC' : undefined, promptReplacement, context, classificationInput) : null;
         let cached = cacheKey ? await classificationCache.get(cacheKey, cacheOptions) : null;
@@ -169,7 +169,7 @@ export function proxyHandler(db, config, { fetchImpl = fetch, debugLogDirectory,
             for (const alias of aliases) if (upstreamIds.has(alias.model_upstream)) availableModels.add(alias.model_alias);
           }
           if (!availableCatalogues) fail(503, 'model_discovery_unavailable', 'Upstream model discovery temporarily unavailable');
-          record.evaluation = await evaluateClassification(key.evaluation_script, classificationInput, classification, [...availableModels], { signal: controller.signal, inputType: classificationInputType, context, helpers: scriptHelpers });
+          record.evaluation = await evaluateClassification(key.evaluation_script, classificationInput, classification, [...availableModels], { signal: controller.signal, inputType: classificationInputType, context, helpers: scriptHelpers, scriptTimeouts: config.scriptTimeouts });
           await debugLog?.evaluation(record.evaluation);
           selectedModel = evaluatedModel(meta.model, record.evaluation.models, availableModels);
           if (cacheKey && selectedModel && availableCatalogues === catalogues.size) pendingCacheWrite = { key: cacheKey, value: {
@@ -197,7 +197,7 @@ export function proxyHandler(db, config, { fetchImpl = fetch, debugLogDirectory,
         if (!(req.get('content-type') || '').includes('application/json'))
           fail(400, 'invalid_content_type', 'Input scripts require application/json');
         const updated = await updateRequestInput(key.input_script, JSON.parse(forwardingBody.toString('utf8')),
-          classificationInputType, context, { signal: controller.signal, bodyLimit: config.bodyLimit, helpers: scriptHelpers });
+          classificationInputType, context, { signal: controller.signal, bodyLimit: config.bodyLimit, helpers: scriptHelpers, scriptTimeouts: config.scriptTimeouts });
         await debugLog?.updateInput(updated.input);
         if (responses) validateResponsesInput(updated.input, JSON.parse(body.toString('utf8')));
         const updatedMeta = await metadata(updated.body, 'application/json', anthropic);
@@ -324,7 +324,7 @@ export function proxyHandler(db, config, { fetchImpl = fetch, debugLogDirectory,
           };
           for await (const chunk of transformOutputStream(originalBody(), key.output_script,
             classificationInputType, context, {
-            signal: controller.signal, helpers: scriptHelpers, onOriginal: output => debugLog?.originalOutputEvent(output),
+            signal: controller.signal, helpers: scriptHelpers, scriptTimeouts: config.scriptTimeouts, onOriginal: output => debugLog?.originalOutputEvent(output),
               onUpdated: output => debugLog?.updatedOutputEvent(output),
             })) {
             debugLog?.push(chunk, 'text/event-stream');
@@ -354,7 +354,7 @@ export function proxyHandler(db, config, { fetchImpl = fetch, debugLogDirectory,
           if (!output || typeof output !== 'object' || Array.isArray(output))
             fail(502, 'invalid_output_script_input', 'Output script requires a JSON object');
           await debugLog?.originalOutput(output);
-          const updated = await updateResponseOutput(key.output_script, output, classificationInputType, context, { signal: controller.signal, helpers: scriptHelpers });
+          const updated = await updateResponseOutput(key.output_script, output, classificationInputType, context, { signal: controller.signal, helpers: scriptHelpers, scriptTimeouts: config.scriptTimeouts });
           await debugLog?.updatedOutput(updated);
           res.status(upstream.status); responseHeaders(upstream, res);
           res.setHeader('content-type', 'application/json; charset=utf-8');
