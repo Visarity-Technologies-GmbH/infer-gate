@@ -1,3 +1,4 @@
+# Four scripts hooks enabling classification, model-routing, compaction etc.
 An InferGate role has **four JavaScript scripts**. On a request that uses all four, they run in this order: `prompt` prepares text for the classifier → `evaluate` uses the classifier’s answer to select a model → `updateInput` edits the request before inference → `updateOutput` edits what the client receives.
 
 Each function must return a **Promise**. The simplest way to meet that contract is to declare the function `async` and `return` the value described below.
@@ -102,3 +103,12 @@ Time with one or more pending `fetchJson` calls is excluded from the existing **
 The overall gateway request timeout or client cancellation can end execution earlier. Outstanding fetches are cancelled when the script finishes or is terminated. The helper bridge allows at most **32 KiB of serialized arguments** per call, including the object, URL and token. The existing **256 KiB serialized script result/context limit** also applies when returning or retaining fetched data.
 
 When calling InferGate itself, the supplied proxy key determines the nested request's role and scripts. Use a role without the same transformation when the nested input could trigger recursive calls. Each nested request has its own diagnostic directory. The parent request's successful input transformation is captured as `update_input.json` in the parent's directory when debug logging is enabled.
+
+# Examples and local testing
+
+The `scripts/examples` directory includes two examples.
+
+- `jev_classification_routing` demonstrates how to use JEV from Typesafe AI for classification and semantic model routing.
+- `reasoning_compaction` calls an LLM for each reasoning or thinking string in the input to compact or shorten it and reduce input tokens.
+
+`scripts/script_test.js` lets administrators test each kind of role script independently of the gateway request flow. The `scripts/test_data_in` directory provides sample test data. Request files captured by the gateway's debug logging can also be used as input.

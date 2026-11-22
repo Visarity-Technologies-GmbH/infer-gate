@@ -2,7 +2,7 @@
 
 ![InferGate](infergate.jpg)
 
-InferGate lets teams share access to AI providers without sharing vendor credentials. Applications call one gateway with their own proxy keys. Administrators use a web dashboard to control which models each key can use, track consumption, and reduce token costs by routing simpler prompts to lower-priced models (requires coding skills).
+InferGate lets teams share access to AI providers without sharing vendor credentials. Applications call one gateway with their own proxy keys. Administrators use a web dashboard to control which models each key can use, track consumption, and reduce token costs by routing simpler prompts to lower-priced models ([requires coding skills](scripts/README.md)).
 
 ## Features
 
